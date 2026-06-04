@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import net.rpcsx.ui.settings.components.core.PreferenceHeader
 import net.rpcsx.ui.settings.components.core.PreferenceIcon
+import net.rpcsx.ui.settings.components.core.PreferenceSubtitle
 import net.rpcsx.ui.settings.components.core.PreferenceValue
 import net.rpcsx.ui.settings.components.preference.HomePreference
 import net.rpcsx.ui.settings.components.preference.RegularPreference
@@ -796,6 +797,7 @@ fun ControllerSettings(
                 SwitchPreference(
                     checked = itemValue,
                     title = stringResource(R.string.enable_sustained_performance) + if (itemValue == def) "" else " *",
+                    subtitle = { PreferenceSubtitle(text = stringResource(R.string.sustained_performance_summary)) },
                     leadingIcon = null,
                     onClick = { value ->
                         GeneralSettings.setValue("sustained_performance", value)

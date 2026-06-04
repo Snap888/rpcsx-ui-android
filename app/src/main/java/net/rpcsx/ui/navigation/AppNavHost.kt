@@ -147,13 +147,24 @@ fun AppNavHost() {
         }
     }
 
-    if (prefs.getString("ui_channel", "") == "") {
+    // Default to this fork's channels, and migrate away from the upstream RPCSX
+    // repos (which only host the official builds and would otherwise prompt
+    // "updates" that downgrade this custom build).
+    val officialUiChannels = setOf(
+        "https://github.com/RPCSX/rpcsx-ui-android",
+        "https://github.com/RPCSX/rpcsx-ui-android-build"
+    )
+    if (prefs.getString("ui_channel", "").let { it.isNullOrEmpty() || it in officialUiChannels }) {
         prefs.edit {
             putString("ui_channel", ReleaseUiChannel)
         }
     }
 
-    if (prefs.getString("rpcsx_channel", "") == "") {
+    val officialRpcsxChannels = setOf(
+        "https://github.com/RPCSX/rpcsx",
+        "https://github.com/RPCSX/rpcsx-build"
+    )
+    if (prefs.getString("rpcsx_channel", "").let { it.isNullOrEmpty() || it in officialRpcsxChannels }) {
         prefs.edit {
             putString("rpcsx_channel", ReleaseRpcsxChannel)
         }
