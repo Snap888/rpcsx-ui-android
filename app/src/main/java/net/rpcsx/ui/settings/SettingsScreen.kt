@@ -80,6 +80,7 @@ import net.rpcsx.ui.settings.components.core.PreferenceIcon
 import net.rpcsx.ui.settings.components.core.PreferenceSubtitle
 import net.rpcsx.ui.settings.components.core.PreferenceValue
 import net.rpcsx.ui.settings.components.preference.HomePreference
+import net.rpcsx.ui.settings.components.preference.HomeSwitchPreference
 import net.rpcsx.ui.settings.components.preference.RegularPreference
 import net.rpcsx.ui.settings.components.preference.SingleSelectionDialog
 import net.rpcsx.ui.settings.components.preference.SliderPreference
@@ -720,12 +721,12 @@ fun SettingsScreen(
                 var itemValue by remember {
                     mutableStateOf(GeneralSettings["vdec_trace_log"] as Boolean? ?: false)
                 }
-                SwitchPreference(
-                    checked = itemValue,
+                HomeSwitchPreference(
                     title = stringResource(R.string.enable_vdec_trace_log),
-                    subtitle = { PreferenceSubtitle(text = stringResource(R.string.vdec_trace_log_summary), maxLines = 4) },
-                    leadingIcon = null,
-                    onClick = { value ->
+                    description = stringResource(R.string.vdec_trace_log_summary),
+                    checked = itemValue,
+                    icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_description)) },
+                    onCheckedChange = { value ->
                         // cellVdec -> Trace when on, Notice (default) when off. Written to the
                         // core config's Log map, applied on next game boot.
                         val json = if (value) "{\"cellVdec\":\"Trace\"}" else "{\"cellVdec\":\"Notice\"}"
@@ -752,12 +753,12 @@ fun SettingsScreen(
                 var itemValue by remember {
                     mutableStateOf(GeneralSettings["perf_overlay"] as Boolean? ?: false)
                 }
-                SwitchPreference(
-                    checked = itemValue,
+                HomeSwitchPreference(
                     title = stringResource(R.string.enable_perf_overlay),
-                    subtitle = { PreferenceSubtitle(text = stringResource(R.string.perf_overlay_summary), maxLines = 3) },
-                    leadingIcon = null,
-                    onClick = { value ->
+                    description = stringResource(R.string.perf_overlay_summary),
+                    checked = itemValue,
+                    icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_show_osc)) },
+                    onCheckedChange = { value ->
                         val ok = try {
                             RPCSX.instance.settingsSet(
                                 "Video@@Performance Overlay@@Enabled",
