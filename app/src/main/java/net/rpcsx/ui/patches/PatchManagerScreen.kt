@@ -3,6 +3,7 @@ package net.rpcsx.ui.patches
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,6 +32,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,8 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,6 +53,40 @@ import net.rpcsx.ui.settings.components.preference.HomeSwitchPreference
 import net.rpcsx.utils.Patch
 import net.rpcsx.utils.PatchDownloadResult
 import net.rpcsx.utils.PatchRepository
+
+// RPCS3 uses the literal "All" as the title/serial for patches that apply to every
+// game. Treat it as a synthetic "universal" group rather than a game name.
+private const val UNIVERSAL_LABEL = "All games (universal)"
+
+/** Every game this patch targets. Falls back to serials, then to the universal group. */
+private fun gameLabelsFor(p: Patch): List<String> {
+    val titles = p.titles.filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
+    if (titles.isNotEmpty()) return titles
+    val serials = p.serials.filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
+    if (serials.isNotEmpty()) return serials
+    return listOf(UNIVERSAL_LABEL)
+}
+
+/** Matches a patch by its own fields (not the game name, which the section handles). */
+private fun patchMatches(p: Patch, q: String): Boolean =
+    p.name.contains(q, ignoreCase = true) ||
+        p.author.contains(q, ignoreCase = true) ||
+        p.notes.contains(q, ignoreCase = true) ||
+        p.serials.any { it.contains(q, ignoreCase = true) }
+
+/** One game section: the game label plus the patches shown for it under the current query. */
+private data class GameGroup(
+    val label: String,
+    val total: Int,
+    val enabledCount: Int,
+    val shown: List<Patch>,
+)
+
+private fun patchRowSubtitle(patch: Patch): String {
+    val author = patch.author.ifEmpty { "Unknown author" }
+    val head = if (patch.version.isNotEmpty()) "$author · v${patch.version}" else author
+    return if (patch.notes.isNotEmpty()) "$head\n${patch.notes}" else head
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +98,8 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
+    // Per-game expand state. While searching we ignore this and expand matches.
+    val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     fun refresh() {
         scope.launch {
@@ -74,19 +113,40 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
 
     LaunchedEffect(Unit) { refresh() }
 
-    // Match against patch name, game title (e.g. "LittleBigPlanet 2"), author,
-    // notes and the game serials (e.g. NPUA70092).
-    val filteredPatches = remember(patches, query) {
-        val q = query.trim()
-        if (q.isEmpty()) patches
-        else patches.filter { p ->
-            p.name.contains(q, ignoreCase = true) ||
-                p.titles.any { it.contains(q, ignoreCase = true) } ||
-                p.author.contains(q, ignoreCase = true) ||
-                p.notes.contains(q, ignoreCase = true) ||
-                p.serials.any { it.contains(q, ignoreCase = true) }
+    // Group every patch under each game it targets. Sorted alphabetically (case
+    // insensitive), with the universal group pinned last. Recomputed only when the
+    // patch set changes (e.g. download, import, or a single-row enable toggle).
+    val groups = remember(patches) {
+        val map = sortedMapOf<String, MutableList<Patch>>(String.CASE_INSENSITIVE_ORDER)
+        for (p in patches) {
+            for (label in gameLabelsFor(p)) {
+                map.getOrPut(label) { mutableListOf() }.add(p)
+            }
+        }
+        val universal = map.remove(UNIVERSAL_LABEL)
+        buildList {
+            map.forEach { (label, list) -> add(label to list.toList()) }
+            if (universal != null) add(UNIVERSAL_LABEL to universal.toList())
         }
     }
+
+    val q = query.trim()
+
+    // Visible sections for the current query. A section shows when the game name
+    // matches (then all its patches show) OR when one of its patches matches (then
+    // only those rows show). Anything else is dropped entirely - so searching a game
+    // name yields exactly that game and nothing else.
+    val visibleGroups = remember(groups, q) {
+        groups.mapNotNull { (label, ps) ->
+            val gameMatches = q.isEmpty() || label.contains(q, ignoreCase = true)
+            val shown = if (gameMatches) ps else ps.filter { patchMatches(it, q) }
+            if (shown.isEmpty()) null
+            else GameGroup(label, ps.size, ps.count { it.enabled }, shown)
+        }
+    }
+
+    val totalPatches = remember(patches) { patches.size }
+    val totalEnabled = remember(patches) { patches.count { it.enabled } }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -136,7 +196,7 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Patches are off by default. Download the official set or import a file, then enable the ones you want per game.",
+                        text = "Patches are off by default. Download the official set or import a file, then expand a game and enable the patches you want.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -200,6 +260,18 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
                                 }
                             }
                         )
+
+                        val summary = if (q.isEmpty()) {
+                            "$totalPatches patches across ${groups.size} games · $totalEnabled on"
+                        } else {
+                            val shownPatches = visibleGroups.sumOf { it.shown.size }
+                            "$shownPatches patches in ${visibleGroups.size} games match \"$q\""
+                        }
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -233,55 +305,110 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
                         )
                     }
                 }
-            } else if (filteredPatches.isEmpty()) {
+            } else if (visibleGroups.isEmpty()) {
                 item(key = "no_match") {
                     Text(
-                        text = "No patches match \"$query\".",
+                        text = "No games or patches match \"$query\".",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
                     )
                 }
             } else {
-                items(filteredPatches, key = { it.hash + "/" + it.name }) { patch ->
-                    HomeSwitchPreference(
-                        title = patch.name.ifEmpty { "(unnamed patch)" },
-                        description = patchSubtitle(patch),
-                        checked = patch.enabled,
-                        icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_build)) },
-                        onCheckedChange = { enabled ->
-                            scope.launch {
-                                val ok = withContext(Dispatchers.IO) {
-                                    PatchRepository.setEnabled(patch, enabled)
-                                }
-                                if (ok) {
-                                    // Update just this row instead of re-parsing the
-                                    // whole 850 KB patch set on every toggle.
-                                    patches = patches.map {
-                                        if (it.hash == patch.hash && it.name == patch.name)
-                                            it.copy(enabled = enabled) else it
-                                    }
-                                } else {
-                                    Toast.makeText(context, "Could not change patch", Toast.LENGTH_SHORT).show()
-                                }
+                val searching = q.isNotEmpty()
+                visibleGroups.forEach { group ->
+                    val isExpanded = searching || (expanded[group.label] == true)
+
+                    item(key = "header/${group.label}") {
+                        GameSectionHeader(
+                            label = group.label,
+                            enabledCount = group.enabledCount,
+                            total = group.total,
+                            expanded = isExpanded,
+                            // No toggle while searching: matches stay open.
+                            collapsible = !searching,
+                            onToggle = {
+                                expanded[group.label] = !(expanded[group.label] ?: false)
                             }
+                        )
+                    }
+
+                    if (isExpanded) {
+                        items(
+                            group.shown,
+                            key = { "${group.label}/${it.hash}/${it.name}" }
+                        ) { patch ->
+                            HomeSwitchPreference(
+                                title = patch.name.ifEmpty { "(unnamed patch)" },
+                                description = patchRowSubtitle(patch),
+                                checked = patch.enabled,
+                                icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_build)) },
+                                onCheckedChange = { enabled ->
+                                    scope.launch {
+                                        val ok = withContext(Dispatchers.IO) {
+                                            PatchRepository.setEnabled(patch, enabled)
+                                        }
+                                        if (ok) {
+                                            // Update just this patch (it may appear under several
+                                            // game sections) instead of re-parsing the whole set.
+                                            patches = patches.map {
+                                                if (it.hash == patch.hash && it.name == patch.name)
+                                                    it.copy(enabled = enabled) else it
+                                            }
+                                        } else {
+                                            Toast.makeText(context, "Could not change patch", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
     }
 }
 
-private fun patchSubtitle(patch: Patch): String {
-    val author = patch.author.ifEmpty { "Unknown author" }
-    // Prefer the human-readable game title(s); fall back to serials when absent.
-    val games = when {
-        patch.titles.size == 1 -> patch.titles.first()
-        patch.titles.size > 1 -> "${patch.titles.size} games"
-        patch.serials.isEmpty() -> "all games"
-        patch.serials.size == 1 -> patch.serials.first()
-        else -> "${patch.serials.size} games"
+@Composable
+private fun GameSectionHeader(
+    label: String,
+    enabledCount: Int,
+    total: Int,
+    expanded: Boolean,
+    collapsible: Boolean,
+    onToggle: () -> Unit,
+) {
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .then(if (collapsible) Modifier.clickable(onClick = onToggle) else Modifier)
+        .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp)
+
+    Row(
+        modifier = rowModifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            val sub = if (enabledCount > 0) "$total patches · $enabledCount on" else "$total patches"
+            Text(
+                text = sub,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (collapsible) {
+            Icon(
+                painter = painterResource(
+                    if (expanded) R.drawable.ic_keyboard_arrow_up else R.drawable.ic_keyboard_arrow_down
+                ),
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
-    return if (patch.notes.isNotEmpty()) "$author · $games\n${patch.notes}" else "$author · $games"
 }
