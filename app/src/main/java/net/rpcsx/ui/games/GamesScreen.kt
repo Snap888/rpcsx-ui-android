@@ -289,6 +289,23 @@ fun GameItem(game: Game, onConfigure: () -> Unit = {}) {
                     }
                 }
 
+                // Game version (APP_VER) badge so users can tell which patch applies
+                game.info.version.value?.takeIf { it.isNotBlank() }?.let { ver ->
+                    Text(
+                        text = "v$ver",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .background(
+                                withAlpha(Color.Black, 0.55f),
+                                shape = MaterialTheme.shapes.extraSmall
+                            )
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+
                 if (game.progressList.isNotEmpty()) {
                     Row(
                         modifier = Modifier
