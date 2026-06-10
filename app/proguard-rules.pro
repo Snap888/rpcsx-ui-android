@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# Entry points invoked from the native core via JNI by name (FindClass /
+# GetStaticMethodID / NewObject). R8 cannot see these references - keeping
+# them reachable today is incidental. Pin them explicitly.
+-keep class net.rpcsx.GameInfo { <init>(...); }
+-keep class net.rpcsx.GameRepository { *; }
+-keep class net.rpcsx.ProgressRepository { *; }
+-keep class net.rpcsx.FirmwareRepository { *; }
+-keep class net.rpcsx.RPCSX { *; }
