@@ -104,6 +104,8 @@ class MainActivity : ComponentActivity() {
                 // Apply the device-adaptive compile-thread cap before any game can
                 // boot, so low-RAM devices don't OOM during first-boot compilation.
                 net.rpcsx.utils.CompileThreadPolicy.apply(applicationContext)
+                // Android battery-saver (FIFO present + low SPU busy-wait); default on.
+                net.rpcsx.utils.PowerPolicy.apply()
                 val gpuDriverPath = GeneralSettings["gpu_driver_path"] as? String
                 val gpuDriverName = GeneralSettings["gpu_driver_name"] as? String
 

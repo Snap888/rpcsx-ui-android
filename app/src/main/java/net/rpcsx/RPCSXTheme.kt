@@ -187,7 +187,7 @@ object ThemeState {
     private val _amoled = mutableStateOf(GeneralSettings["theme_amoled"].boolean(false))
     // Default to the launcher-icon purple (#A59DC4) so the app's identity matches
     // the icon out of the box. 0 would mean "use the built-in/Material You scheme".
-    private val _accent = mutableStateOf(GeneralSettings["theme_accent"].int(0xFFA59DC4.toInt()))
+    private val _accent = mutableStateOf(GeneralSettings["theme_accent"].int(0xFFBBADDE.toInt()))
 
     // Reading these in a composable subscribes it; assigning persists + recomposes.
     var mode: String

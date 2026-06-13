@@ -34,6 +34,7 @@ import net.rpcsx.ui.settings.components.preference.SwitchPreference
 import androidx.compose.ui.platform.LocalContext
 import net.rpcsx.utils.CompileThreadPolicy
 import net.rpcsx.utils.GameViewTheme
+import net.rpcsx.utils.PowerPolicy
 import net.rpcsx.utils.GeneralSettings
 
 /**
@@ -231,6 +232,20 @@ fun ClankerFeaturesScreen(navigateBack: () -> Unit) {
 
             item(key = "hdr_performance") {
                 PreferenceHeader(text = stringResource(R.string.clanker_features_performance))
+            }
+            item(key = "battery_saver") {
+                var itemValue by remember { mutableStateOf(PowerPolicy.enabled) }
+                SwitchPreference(
+                    checked = itemValue,
+                    title = stringResource(R.string.clanker_battery_saver),
+                    subtitle = { PreferenceSubtitle(text = stringResource(R.string.clanker_battery_saver_summary), maxLines = 3) },
+                    leadingIcon = null,
+                    onClick = { value ->
+                        PowerPolicy.enabled = value
+                        PowerPolicy.apply()
+                        itemValue = value
+                    }
+                )
             }
             item(key = "auto_compile_threads") {
                 val context = LocalContext.current
