@@ -185,7 +185,9 @@ object ThemeState {
     private val _mode = mutableStateOf(GeneralSettings["theme_mode"].string("system"))
     private val _dynamic = mutableStateOf(GeneralSettings["theme_dynamic"].boolean(false))
     private val _amoled = mutableStateOf(GeneralSettings["theme_amoled"].boolean(false))
-    private val _accent = mutableStateOf(GeneralSettings["theme_accent"].int(0))
+    // Default to the launcher-icon purple (#A59DC4) so the app's identity matches
+    // the icon out of the box. 0 would mean "use the built-in/Material You scheme".
+    private val _accent = mutableStateOf(GeneralSettings["theme_accent"].int(0xFFA59DC4.toInt()))
 
     // Reading these in a composable subscribes it; assigning persists + recomposes.
     var mode: String
@@ -231,7 +233,15 @@ fun RPCSXTheme(
     // surfaces still win. 0 = off.
     if (ThemeState.accentColor != 0) {
         val accent = Color(ThemeState.accentColor)
-        fun on(c: Color) = if (c.luminance() > 0.5f) Color(0xFF101012) else Color.White
+        // Pick black/white text by whichever has the higher WCAG contrast against
+        // the colour - a fixed luminance threshold gives unreadable white text on
+        // mid-tones like the lavender accent (#A59DC4, luminance ~0.36).
+        fun on(c: Color): Color {
+            val l = c.luminance()
+            val contrastWhite = 1.05f / (l + 0.05f)
+            val contrastBlack = (l + 0.05f) / 0.05f
+            return if (contrastBlack >= contrastWhite) Color(0xFF101012) else Color.White
+        }
         val container = lerp(accent, colors.surface, 0.62f)
         colors = colors.copy(
             primary = accent,
