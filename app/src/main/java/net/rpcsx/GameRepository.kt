@@ -100,7 +100,8 @@ class GameRepository {
 
         private var needsRefresh = false
         val isRefreshing = mutableStateOf(false)
-        private var isRefreshInCooldown = false
+        private var refreshThreadRunning = false
+        private val refreshLock = Any()
 
         fun save() {
             try {
@@ -129,20 +130,33 @@ class GameRepository {
         }
 
         fun queueRefresh() {
-            needsRefresh = true
-            if (!isRefreshing.value || isRefreshInCooldown) {
-                thread {
-                    isRefreshing.value = true
-                    do {
-                        needsRefresh = false
-                        refresh()
-                    } while (needsRefresh)
-                    isRefreshInCooldown = true
-                    Thread.sleep(300)
-                    if (!needsRefresh) {
-                        isRefreshInCooldown = false
-                        isRefreshing.value = false
+            // Exactly one refresh worker at a time; extra requests coalesce via
+            // needsRefresh. The old code used non-volatile flags and a cooldown
+            // window that could spawn a second worker, racing refresh()'s
+            // clear()+collectGameInfo on the snapshot list (crash/duplicates).
+            // refreshThreadRunning and isRefreshing are always updated together
+            // under the lock so the spinner can't get stuck or be flipped by a
+            // departing worker after a new one started.
+            synchronized(refreshLock) {
+                needsRefresh = true
+                if (refreshThreadRunning) return
+                refreshThreadRunning = true
+                isRefreshing.value = true
+            }
+            thread {
+                while (true) {
+                    var done = false
+                    synchronized(refreshLock) {
+                        if (!needsRefresh) {
+                            refreshThreadRunning = false
+                            isRefreshing.value = false
+                            done = true
+                        } else {
+                            needsRefresh = false
+                        }
                     }
+                    if (done) break
+                    refresh()
                 }
             }
         }

@@ -147,31 +147,29 @@ object FileUtil {
         }
     }
 
-    fun saveFile(context: Context, source: Uri, target: String) {
-        var bis: BufferedInputStream? = null
-        var bos: BufferedOutputStream? = null
-
-        try {
-            bis = BufferedInputStream(
-                FileInputStream(
-                    context.contentResolver.openFileDescriptor(
-                        source, "r"
-                    )!!.fileDescriptor
-                )
-            )
-
-            bos = BufferedOutputStream(FileOutputStream(target, false))
-            val buf = ByteArray(1024)
-            bis.read(buf)
-
-            do {
-                bos.write(buf)
-            } while (bis.read(buf) != -1)
-        } catch (e: IOException) {
+    fun saveFile(context: Context, source: Uri, target: String): Boolean {
+        // Must write exactly the bytes read: the old code wrote a full fixed-size
+        // buffer regardless of how many bytes read() returned, padding/garbling
+        // the tail of every copied file (corrupted installs and side-loaded .so).
+        return try {
+            val pfd = context.contentResolver.openFileDescriptor(source, "r")
+                ?: return false
+            pfd.use {
+                BufferedInputStream(FileInputStream(it.fileDescriptor)).use { bis ->
+                    BufferedOutputStream(FileOutputStream(target, false)).use { bos ->
+                        val buf = ByteArray(64 * 1024)
+                        var n: Int
+                        while (bis.read(buf).also { read -> n = read } != -1) {
+                            if (n > 0) bos.write(buf, 0, n)
+                        }
+                        bos.flush()
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
             e.printStackTrace()
-        } finally {
-            bis?.close()
-            bos?.close()
+            false
         }
     }
 
