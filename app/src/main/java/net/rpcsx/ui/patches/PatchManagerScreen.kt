@@ -61,9 +61,9 @@ private const val UNIVERSAL_LABEL = "All games (universal)"
 /** Every game this patch targets. Falls back to serials, then to the universal group. */
 private fun gameLabelsFor(p: Patch): List<String> {
     val titles = p.titles.filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
-    if (titles.isNotEmpty()) return titles
+    if (titles.isNotEmpty()) return titles.distinctBy { it.lowercase() }
     val serials = p.serials.filter { it.isNotBlank() && !it.equals("All", ignoreCase = true) }
-    if (serials.isNotEmpty()) return serials
+    if (serials.isNotEmpty()) return serials.distinctBy { it.lowercase() }
     return listOf(UNIVERSAL_LABEL)
 }
 
@@ -124,9 +124,11 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
             }
         }
         val universal = map.remove(UNIVERSAL_LABEL)
+        // Dedup within a group: a patch reaching the same game via differently
+        // cased title/serial spellings must appear only once (and keeps row keys unique).
         buildList {
-            map.forEach { (label, list) -> add(label to list.toList()) }
-            if (universal != null) add(UNIVERSAL_LABEL to universal.toList())
+            map.forEach { (label, list) -> add(label to list.distinctBy { it.hash to it.name }) }
+            if (universal != null) add(UNIVERSAL_LABEL to universal.distinctBy { it.hash to it.name })
         }
     }
 
@@ -143,6 +145,12 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
             if (shown.isEmpty()) null
             else GameGroup(label, ps.size, ps.count { it.enabled }, shown)
         }
+    }
+
+    // On a fresh search, open the matched groups by default - but they stay
+    // user-collapsible (the expansion map is the single source of truth below).
+    LaunchedEffect(q) {
+        if (q.isNotEmpty()) visibleGroups.forEach { expanded[it.label] = true }
     }
 
     val totalPatches = remember(patches) { patches.size }
@@ -315,9 +323,8 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
                     )
                 }
             } else {
-                val searching = q.isNotEmpty()
                 visibleGroups.forEach { group ->
-                    val isExpanded = searching || (expanded[group.label] == true)
+                    val isExpanded = expanded[group.label] == true
 
                     item(key = "header/${group.label}") {
                         GameSectionHeader(
@@ -325,8 +332,8 @@ fun PatchManagerScreen(navigateBack: () -> Unit) {
                             enabledCount = group.enabledCount,
                             total = group.total,
                             expanded = isExpanded,
-                            // No toggle while searching: matches stay open.
-                            collapsible = !searching,
+                            // Always collapsible, including during search.
+                            collapsible = true,
                             onToggle = {
                                 expanded[group.label] = !(expanded[group.label] ?: false)
                             }
