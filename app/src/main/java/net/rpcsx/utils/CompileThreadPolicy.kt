@@ -42,18 +42,22 @@ object CompileThreadPolicy {
     }
 
     /**
-     * Memory-safe "Max LLVM Compile Threads" for this device. 0 = auto (all
-     * cores). The caps bound concurrent module compiles so peak compiler memory
-     * stays well under the device budget (e.g. ~3.8 GiB devices OOM'd at the
-     * 8-core default but compile fine at 2).
+     * Memory-safe compile-thread cap for this device. 0 = no cap (all cores).
+     *
+     * Calibrated against Android reality, NOT desktop math: total RAM badly
+     * over-predicts what is usable for compilation. An 8 GB device reports
+     * ~7.5 GiB here, yet the Low Memory Killer fires long before the app can use
+     * half of that - it OOM'd at the 8-core default and only booted at 2 threads.
+     * So the tiers are deliberately conservative: an 8 GB-class device is capped
+     * to 2, and only genuinely large-RAM devices run uncapped.
      */
     fun safeThreads(context: Context): Int {
         val gib = totalRamGib(context)
         return when {
             gib <= 0.0 -> 0       // couldn't read RAM: don't interfere
-            gib < 4.5 -> 2
-            gib < 6.5 -> 4
-            else -> 0             // plenty of RAM: stock auto (all cores)
+            gib < 9.0 -> 2        // <=8 GB-class: confirmed OOM at auto, boots at 2
+            gib < 13.0 -> 4       // 12 GB devices
+            else -> 0             // 16 GB+: stock auto (all cores)
         }
     }
 
