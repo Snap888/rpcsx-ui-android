@@ -51,6 +51,7 @@ object AdpfManager {
     private var pm: PowerManager? = null
     @Volatile private var running = false
     private var headroomTick = 0
+    private var headroomUnsupportedLogged = false
     private var lastTargetNanos = 0L
 
     fun register(context: Context) {
@@ -65,6 +66,7 @@ object AdpfManager {
         handler = h
         running = true
         headroomTick = 0
+        headroomUnsupportedLogged = false
 
         // The RSX thread may not have flipped yet when the game is still booting, so
         // the tid is 0 until the first frame. Poll until it appears, then create the
@@ -110,13 +112,23 @@ object AdpfManager {
                     }
                 }
 
-                // A/B telemetry: thermal headroom (0 = none, ~1 = at throttle).
-                if (++headroomTick >= (1000L / POLL_MS).toInt()) {
+                // A/B telemetry: log frame work every ~2s, plus thermal headroom when the
+                // platform provides it. PowerManager.getThermalHeadroom() returns NaN if polled
+                // more often than once per second (and on devices that never implement it), so
+                // we poll at 2s - safely above that floor - and still log work even when headroom
+                // is unavailable, so an A/B run always has comparable data instead of nothing.
+                if (++headroomTick >= (2000L / POLL_MS).toInt()) {
                     headroomTick = 0
+                    val workMs = (runCatching { RPCSX.instance.getFrameWorkNanos() }.getOrDefault(0L)) / 1_000_000.0
                     val hr = runCatching { pm?.getThermalHeadroom(10) }.getOrNull()
                     if (hr != null && !hr.isNaN()) {
-                        Log.i(TAG, "thermal headroom=%.3f work=%.2fms".format(hr,
-                            (runCatching { RPCSX.instance.getFrameWorkNanos() }.getOrDefault(0L)) / 1_000_000.0))
+                        Log.i(TAG, "thermal headroom=%.3f work=%.2fms".format(hr, workMs))
+                    } else {
+                        if (!headroomUnsupportedLogged) {
+                            Log.i(TAG, "thermal headroom unavailable on this device (NaN); logging work only")
+                            headroomUnsupportedLogged = true
+                        }
+                        Log.i(TAG, "work=%.2fms".format(workMs))
                     }
                 }
 
