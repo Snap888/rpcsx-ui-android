@@ -71,6 +71,24 @@ class MainActivity : ComponentActivity() {
             val rpcsxUpdateStatus = GeneralSettings["rpcsx_update_status"]
             val rpcsxPrevLibrary = GeneralSettings["rpcsx_prev_library"] as? String
 
+            // Crash-loop breaker: openLibrary() runs the core .so's native static init, which can
+            // hard-crash (e.g. a wrong-arch / incompatible core) - a native crash Kotlin cannot
+            // catch. Guard it with a persistent flag set right before the load and cleared right
+            // after. If a previous launch set the flag and never cleared it, the core crashed
+            // mid-load: unset it so the app still starts (no data loss) and the user can import a
+            // working core, instead of being stuck in a boot crash loop.
+            if (rpcsxLibrary != null && GeneralSettings["rpcsx_core_loading"] == true) {
+                GeneralSettings["rpcsx_core_loading"] = false
+                GeneralSettings["rpcsx_library"] = null
+                GeneralSettings["rpcsx_prev_library"] = null
+                GeneralSettings.sync()
+                rpcsxLibrary = null
+                AlertDialogQueue.showDialog(
+                    getString(R.string.failed_to_update_rpcsx),
+                    "The selected core failed to load and has been unset. Import a working core to continue."
+                )
+            }
+
             if (rpcsxLibrary != null) {
                 if (rpcsxUpdateStatus == false && rpcsxPrevLibrary != null) {
                     GeneralSettings["rpcsx_library"] = rpcsxPrevLibrary
@@ -92,7 +110,13 @@ class MainActivity : ComponentActivity() {
                     GeneralSettings.sync()
                 }
 
+                // Mark "loading" before the native load; cleared only if the load returns
+                // (no crash). A still-set flag on next launch trips the breaker above.
+                GeneralSettings["rpcsx_core_loading"] = true
+                GeneralSettings.sync()
                 RPCSX.openLibrary(rpcsxLibrary)
+                GeneralSettings["rpcsx_core_loading"] = false
+                GeneralSettings.sync()
             }
 
             val nativeLibraryDir =
