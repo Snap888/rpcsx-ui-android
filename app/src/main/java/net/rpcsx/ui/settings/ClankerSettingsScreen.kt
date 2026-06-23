@@ -283,25 +283,9 @@ fun ClankerFeaturesScreen(navigateBack: () -> Unit) {
                     }
                 )
             }
-            item(key = "smooth_shaders") {
-                var itemValue by remember { mutableStateOf(GeneralSettings["smooth_shaders"] as? Boolean ?: false) }
-                SwitchPreference(
-                    checked = itemValue,
-                    title = "Smooth shaders (async)",
-                    subtitle = {
-                        PreferenceSubtitle(
-                            text = "Compiles shader pipelines on background threads (RPCS3's async-interpreter mode) to cut first-use stutter. Experimental on this backend; takes effect on the next game launch. Turn off if anything freezes.",
-                            maxLines = 4
-                        )
-                    },
-                    leadingIcon = null,
-                    onClick = { value ->
-                        GeneralSettings.setValue("smooth_shaders", value)
-                        runCatching { net.rpcsx.RPCSX.instance.setSmoothShaders(value) }
-                        itemValue = value
-                    }
-                )
-            }
+            // Smooth-shaders toggle removed: the async SPIR-V interpreter destabilised the
+            // Vulkan backend (boot crash) and is a net fps loss on mobile Turnip, so the core
+            // stays on async_recompiler (already the default, stutter-free background compile).
             item(key = "auto_compile_threads") {
                 val context = LocalContext.current
                 var itemValue by remember { mutableStateOf(CompileThreadPolicy.enabled) }
