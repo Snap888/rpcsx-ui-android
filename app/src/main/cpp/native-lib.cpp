@@ -66,6 +66,8 @@ struct RPCSXApi {
   void (*setCpuAffinityMode)(int on);
   void (*setWfeMode)(int on);
   void (*setSmoothShaders)(int on);
+  void (*setGpuTurbo)(int on);
+  void (*registerGpuTurboHandler)(void (*handler)(bool on));
   std::string (*rpcnGetConfig)();
   void (*rpcnSetCredentials)(std::string_view npid, std::string_view password, std::string_view token);
   std::string (*rpcnGetHosts)();
@@ -161,6 +163,8 @@ struct RPCSXLibrary : RPCSXApi {
     result.setCpuAffinityMode = reinterpret_cast<decltype(setCpuAffinityMode)>(dlsym(handle, "_rpcsx_setCpuAffinityMode"));
     result.setWfeMode = reinterpret_cast<decltype(setWfeMode)>(dlsym(handle, "_rpcsx_setWfeMode"));
     result.setSmoothShaders = reinterpret_cast<decltype(setSmoothShaders)>(dlsym(handle, "_rpcsx_setSmoothShaders"));
+    result.setGpuTurbo = reinterpret_cast<decltype(setGpuTurbo)>(dlsym(handle, "_rpcsx_setGpuTurbo"));
+    result.registerGpuTurboHandler = reinterpret_cast<decltype(registerGpuTurboHandler)>(dlsym(handle, "_rpcsx_registerGpuTurboHandler"));
     result.rpcnGetConfig = reinterpret_cast<decltype(rpcnGetConfig)>(dlsym(handle, "_rpcsx_rpcnGetConfig"));
     result.rpcnSetCredentials = reinterpret_cast<decltype(rpcnSetCredentials)>(dlsym(handle, "_rpcsx_rpcnSetCredentials"));
     result.rpcnGetHosts = reinterpret_cast<decltype(rpcnGetHosts)>(dlsym(handle, "_rpcsx_rpcnGetHosts"));
@@ -562,11 +566,30 @@ Java_net_rpcsx_RPCSX_getVersion(JNIEnv *env, jobject) {
 // Opt-in GPU turbo (Clanker Settings, default off): force max Adreno clocks via adrenotools'
 // KGSL ioctl. adrenotools_set_turbo opens /dev/kgsl-3d0 itself and no-ops silently on non-Adreno
 // or if the fd open fails, so it is always safe; statically linked from libadrenotools.
+static void native_gpu_turbo_apply(bool on) {
+#ifdef __aarch64__
+  adrenotools_set_turbo(on);
+#else
+  (void) on;
+#endif
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_net_rpcsx_RPCSX_setGpuTurbo(JNIEnv *, jobject, jboolean on) {
-#ifdef __aarch64__
-  adrenotools_set_turbo(on == JNI_TRUE);
-#endif
+  // Prefer the core bridge so the in-game home-menu GPU-turbo toggle and this app toggle drive
+  // one path: the core stores the flag and calls back into native_gpu_turbo_apply (adrenotools).
+  // Register the handler lazily on first use (runs at app startup via GpuTurbo.apply()).
+  if (rpcsxLib.setGpuTurbo) {
+    static bool s_handler_registered = false;
+    if (!s_handler_registered && rpcsxLib.registerGpuTurboHandler) {
+      rpcsxLib.registerGpuTurboHandler(&native_gpu_turbo_apply);
+      s_handler_registered = true;
+    }
+    rpcsxLib.setGpuTurbo(on == JNI_TRUE ? 1 : 0);
+    return;
+  }
+  // Fallback for an older core .so without the bridge: drive adrenotools directly.
+  native_gpu_turbo_apply(on == JNI_TRUE);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
