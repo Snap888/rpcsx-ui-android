@@ -21,9 +21,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -46,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -75,6 +79,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
+import net.rpcsx.Digital1Flags
+import net.rpcsx.Digital2Flags
 import net.rpcsx.ui.settings.components.core.PreferenceHeader
 import net.rpcsx.ui.settings.components.core.PreferenceIcon
 import net.rpcsx.ui.settings.components.core.PreferenceValue
@@ -567,7 +573,7 @@ fun SettingsScreen(
         val configPicker = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
             onResult = { uri: Uri? ->
-                uri?.let { 
+                uri?.let {
                     if (FileUtil.importConfig(context, it))
                         onRefresh()
                 }
@@ -580,7 +586,7 @@ fun SettingsScreen(
                 uri?.let { FileUtil.exportConfig(context, it) }
             }
         )
-        
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -689,7 +695,7 @@ fun SettingsScreen(
                                 dismissText = ""
                             )
                         }
-                    }  
+                    }
                 )
             }
 
@@ -835,6 +841,9 @@ fun ControllerSettings(
         var currentInputName by remember { mutableStateOf("") }
         val requester = remember { FocusRequester() }
 
+        var showShakeButtonDialog by remember { mutableStateOf(false) }
+        var showMotionStickDialog by remember { mutableStateOf(false) }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -889,6 +898,20 @@ fun ControllerSettings(
             }
 
             item {
+                val shakeBinding = inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION]
+                    ?: Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1)
+                val shakeButtonName = InputBindingPrefs.getButtonName(shakeBinding.first, shakeBinding.second)
+
+                RegularPreference(
+                    title = "Shake Button",
+                    value = { PreferenceValue(text = shakeButtonName) },
+                    onClick = {
+                        showShakeButtonDialog = true
+                    }
+                )
+            }
+
+            item {
                 var shakeSensitivity by remember {
                     mutableStateOf(
                         (GeneralSettings["shake_sensitivity"] as? Int)?.toFloat() ?: 15f
@@ -934,12 +957,25 @@ fun ControllerSettings(
                 }
                 SwitchPreference(
                     checked = motionEnabled,
-                    title = "Gyroscope Motion (Right Stick)",
-                    subtitle = { Text("Maps device tilt to Right Stick") },
+                    title = "Gyroscope Motion",
+                    subtitle = { Text("Maps device tilt to analog stick") },
                     leadingIcon = null,
                     onClick = { value: Boolean ->
                         GeneralSettings.setValue("motion_sensor_enabled", value)
                         motionEnabled = value
+                    }
+                )
+            }
+
+            item {
+                val motionStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
+                val motionStickName = if (motionStick == 0) "Left Stick" else "Right Stick"
+
+                RegularPreference(
+                    title = "Motion Target Stick",
+                    value = { PreferenceValue(text = motionStickName) },
+                    onClick = {
+                        showMotionStickDialog = true
                     }
                 )
             }
@@ -997,11 +1033,10 @@ fun ControllerSettings(
                     }
                 }
                 .forEach { binding ->
-                    // Пропускаем тряску, если она не назначена (0, 0)
-                    if (binding.first == InputBindingPrefs.KEYCODE_SHAKE_MOTION && binding.second.first == 0 && binding.second.second == 0) {
+                    if (binding.first == InputBindingPrefs.KEYCODE_SHAKE_MOTION) {
                         return@forEach
                     }
-                    
+
                     item {
                         RegularPreference(
                             title = InputBindingPrefs.rpcsxKeyCodeToString(
@@ -1025,6 +1060,98 @@ fun ControllerSettings(
                         )
                     }
                 }
+        }
+
+        if (showShakeButtonDialog) {
+            AlertDialog(
+                onDismissRequest = { showShakeButtonDialog = false },
+                title = { Text("Select Shake Button") },
+                text = {
+                    Column {
+                        InputBindingPrefs.availableButtons.forEach { (name, button) ->
+                            val currentShakeBinding = inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION]
+                                ?: Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1)
+                            val isSelected = button.first == currentShakeBinding.first && button.second == currentShakeBinding.second
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION] = button
+                                        InputBindingPrefs.saveBindings(inputBindings.toMap())
+                                        showShakeButtonDialog = false
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Text(
+                                        text = "\u2713",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showShakeButtonDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (showMotionStickDialog) {
+            val currentStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
+            val stickOptions = listOf(Pair("Left Stick", 0), Pair("Right Stick", 1))
+
+            AlertDialog(
+                onDismissRequest = { showMotionStickDialog = false },
+                title = { Text("Select Motion Target Stick") },
+                text = {
+                    Column {
+                        stickOptions.forEach { (name, stick) ->
+                            val isSelected = stick == currentStick
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        GeneralSettings.setValue("motion_target_stick", stick)
+                                        showMotionStickDialog = false
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Text(
+                                        text = "\u2713",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showMotionStickDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
         }
 
         if (showDialog) {
