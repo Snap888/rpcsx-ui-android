@@ -147,6 +147,10 @@ class RPCSX {
         var shakeDigital1: Int = 0
         var shakeDigital2: Int = 0
 
+        // Переменные для хранения состояния гироскопа (значения стика 0-255)
+        var motionRightStickX: Int = 128
+        var motionRightStickY: Int = 128
+
         fun boot(path: String): BootResult {
             return BootResult.fromInt(instance.boot(path))
         }
