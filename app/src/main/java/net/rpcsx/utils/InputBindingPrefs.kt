@@ -9,6 +9,23 @@ object InputBindingPrefs {
     
     const val KEYCODE_SHAKE_MOTION = 800001
     
+    // Список всех доступных кнопок для назначения
+    val availableButtons = listOf(
+        Pair("L2", Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1)),
+        Pair("R2", Pair(Digital2Flags.CELL_PAD_CTRL_R2.bit, 1)),
+        Pair("L1", Pair(Digital2Flags.CELL_PAD_CTRL_L1.bit, 1)),
+        Pair("R1", Pair(Digital2Flags.CELL_PAD_CTRL_R1.bit, 1)),
+        Pair("Cross", Pair(Digital2Flags.CELL_PAD_CTRL_CROSS.bit, 1)),
+        Pair("Circle", Pair(Digital2Flags.CELL_PAD_CTRL_CIRCLE.bit, 1)),
+        Pair("Square", Pair(Digital2Flags.CELL_PAD_CTRL_SQUARE.bit, 1)),
+        Pair("Triangle", Pair(Digital2Flags.CELL_PAD_CTRL_TRIANGLE.bit, 1)),
+        Pair("L3", Pair(Digital1Flags.CELL_PAD_CTRL_L3.bit, 0)),
+        Pair("R3", Pair(Digital1Flags.CELL_PAD_CTRL_R3.bit, 0)),
+        Pair("Start", Pair(Digital1Flags.CELL_PAD_CTRL_START.bit, 0)),
+        Pair("Select", Pair(Digital1Flags.CELL_PAD_CTRL_SELECT.bit, 0)),
+        Pair("PS", Pair(Digital1Flags.CELL_PAD_CTRL_PS.bit, 0))
+    )
+    
     val defaultBindings = mapOf(
         KeyEvent.KEYCODE_DPAD_UP to Pair(Digital1Flags.CELL_PAD_CTRL_UP.bit, 0),
         KeyEvent.KEYCODE_DPAD_DOWN to Pair(Digital1Flags.CELL_PAD_CTRL_DOWN.bit, 0),
@@ -27,7 +44,7 @@ object InputBindingPrefs {
         KeyEvent.KEYCODE_BUTTON_THUMBL to Pair(Digital1Flags.CELL_PAD_CTRL_L3.bit, 0),
         KeyEvent.KEYCODE_BUTTON_THUMBR to Pair(Digital1Flags.CELL_PAD_CTRL_R3.bit, 0),
         666666 to Pair(Digital1Flags.CELL_PAD_CTRL_PS.bit, 0),
-        KEYCODE_SHAKE_MOTION to Pair(0, 0) // По умолчанию тряска не назначена
+        KEYCODE_SHAKE_MOTION to Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1) // По умолчанию L2
     )
 
     fun saveBindings(bindings: Map<Int, Pair<Int, Int>>): Boolean {
@@ -67,5 +84,13 @@ object InputBindingPrefs {
         val digital1 = Digital1Flags.values().find { keyCode == it.bit }?.name?.removePrefix("CELL_PAD_CTRL_")
         val digital2 = Digital2Flags.values().find { keyCode == it.bit }?.name?.removePrefix("CELL_PAD_CTRL_")
         if (digitalNumber == 1) return digital2 ?: "Unknown" else return digital1 ?: "Unknown"
+    }
+    
+    fun getButtonName(bit: Int, digitalNumber: Int): String {
+        return if (digitalNumber == 1) {
+            Digital2Flags.values().find { it.bit == bit }?.name?.removePrefix("CELL_PAD_CTRL_") ?: "Unknown"
+        } else {
+            Digital1Flags.values().find { it.bit == bit }?.name?.removePrefix("CELL_PAD_CTRL_") ?: "Unknown"
+        }
     }
 }
