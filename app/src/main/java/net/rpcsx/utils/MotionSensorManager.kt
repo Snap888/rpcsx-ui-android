@@ -9,6 +9,7 @@ import net.rpcsx.RPCSX
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sign
+import kotlin.math.pow
 
 class MotionSensorManager(private val context: Context) : SensorEventListener {
 
@@ -168,7 +169,8 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
     private fun applyNonLinearSensitivity(value: Int, sensitivity: Float): Int {
         val normalized = (value - 128) / 127.5f
         val exponent = 1.0f / (sensitivity.coerceIn(0.2f, 3.0f))
-        val eased = sign(normalized) * kotlin.math.pow(abs(normalized), exponent)
+        // ИСПРАВЛЕНО: используем Double.pow() правильно
+        val eased = sign(normalized) * (abs(normalized).toDouble().pow(exponent.toDouble())).toFloat()
         return (eased * 127.5f + 128).toInt()
     }
     
