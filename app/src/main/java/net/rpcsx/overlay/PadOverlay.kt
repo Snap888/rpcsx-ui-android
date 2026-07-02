@@ -388,9 +388,12 @@ class PadOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(context,
                 }
             }
 
+            val finalDigital1 = state.digital[0] or RPCSX.shakeDigital1
+            val finalDigital2 = state.digital[1] or RPCSX.shakeDigital2
+
             RPCSX.instance.overlayPadData(
-                state.digital[0],
-                state.digital[1],
+                finalDigital1,
+                finalDigital2,
                 state.leftStickX,
                 state.leftStickY,
                 state.rightStickX,
@@ -625,7 +628,7 @@ class PadOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(context,
     }
 
     fun enableButton(value: Boolean) {
-        selectedInput!!.enabled = value //null means enable checkbox is disabled, shouldn't be called when null
+        selectedInput!!.enabled = value
         invalidate()
     }
 }
