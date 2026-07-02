@@ -141,12 +141,13 @@ class PadOverlayStick(
 
                 super.setBounds(bg.bounds)
 
+                // ИСПРАВЛЕНО: центр = 128, а не 127
                 if (isLeft) {
-                    padState.leftStickX = 127
-                    padState.leftStickY = 127
+                    padState.leftStickX = 128
+                    padState.leftStickY = 128
                 } else {
-                    padState.rightStickX = 127
-                    padState.rightStickY = 127
+                    padState.rightStickX = 128
+                    padState.rightStickY = 128
                 }
                 return -1
             }
