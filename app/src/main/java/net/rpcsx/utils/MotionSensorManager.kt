@@ -26,6 +26,7 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
     private var enabled = false
     private var sensitivity = 1.0f
     private var deadZone = 0.05f
+    private var targetStick = 1 // 0 = left, 1 = right
 
     fun start() {
         enabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
@@ -33,6 +34,7 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
 
         sensitivity = ((GeneralSettings["motion_sensitivity"] as? Int) ?: 50) / 50.0f
         deadZone = ((GeneralSettings["motion_deadzone"] as? Int) ?: 5) / 100.0f
+        targetStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
 
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
@@ -44,6 +46,8 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
 
     fun stop() {
         sensorManager.unregisterListener(this)
+        RPCSX.motionLeftStickX = 128
+        RPCSX.motionLeftStickY = 128
         RPCSX.motionRightStickX = 128
         RPCSX.motionRightStickY = 128
     }
@@ -85,9 +89,14 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
             if (abs(rawX - 128) < deadZone * 128) rawX = 128
             if (abs(rawY - 128) < deadZone * 128) rawY = 128
 
-            // Обновляем глобальные переменные RPCSX
-            RPCSX.motionRightStickX = rawX
-            RPCSX.motionRightStickY = rawY
+            // Обновляем нужный стик
+            if (targetStick == 0) {
+                RPCSX.motionLeftStickX = rawX
+                RPCSX.motionLeftStickY = rawY
+            } else {
+                RPCSX.motionRightStickX = rawX
+                RPCSX.motionRightStickY = rawY
+            }
         }
     }
 }
