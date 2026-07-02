@@ -591,9 +591,6 @@ fun SettingsScreen(
             }
 
             item(key = "clanker_settings") {
-                // Everything this fork adds on top of upstream RPCSX lives behind one
-                // entry with click-through sub-categories (Themes / Features / Patch
-                // Manager), instead of loose toggles scattered through the list.
                 HomePreference(
                     title = stringResource(R.string.clanker_settings),
                     icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_star)) },
@@ -746,8 +743,6 @@ fun SettingsScreen(
                     checked = itemValue,
                     icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_description)) },
                     onCheckedChange = { value ->
-                        // cellVdec -> Trace when on, Notice (default) when off. Written to the
-                        // core config's Log map, applied on next game boot.
                         val json = if (value) "{\"cellVdec\":\"Trace\"}" else "{\"cellVdec\":\"Notice\"}"
                         val ok = try {
                             RPCSX.instance.settingsSet("Log", json)
@@ -828,7 +823,7 @@ fun ControllerSettings(
             )
         }
     ) { contentPadding ->
-        //val context = LocalContext.current
+        val context = LocalContext.current
         val inputBindings = remember {
             mutableStateMapOf<Int, Pair<Int, Int>>().apply {
                 putAll(InputBindingPrefs.loadBindings())
@@ -871,6 +866,64 @@ fun ControllerSettings(
                 )
             }
 
+            item {
+                PreferenceHeader("Motion Sensors")
+            }
+
+            item {
+                var shakeEnabled by remember {
+                    mutableStateOf(
+                        GeneralSettings["shake_enabled"] as Boolean? ?: false
+                    )
+                }
+                SwitchPreference(
+                    checked = shakeEnabled,
+                    title = "Shake Motion Emulation",
+                    leadingIcon = null,
+                    onClick = { value ->
+                        GeneralSettings.setValue("shake_enabled", value)
+                        shakeEnabled = value
+                    }
+                )
+            }
+
+            item {
+                var shakeSensitivity by remember {
+                    mutableStateOf(
+                        (GeneralSettings["shake_sensitivity"] as? Int)?.toFloat() ?: 15f
+                    )
+                }
+                SliderPreference(
+                    value = shakeSensitivity,
+                    valueRange = 5f..30f,
+                    title = "Shake Sensitivity",
+                    steps = 24,
+                    onValueChange = { value ->
+                        GeneralSettings.setValue("shake_sensitivity", value.toInt())
+                        shakeSensitivity = value
+                    },
+                    valueContent = { PreferenceValue(text = shakeSensitivity.toInt().toString()) }
+                )
+            }
+
+            item {
+                var shakeDuration by remember {
+                    mutableStateOf(
+                        (GeneralSettings["shake_press_duration"] as? Int)?.toFloat() ?: 100f
+                    )
+                }
+                SliderPreference(
+                    value = shakeDuration,
+                    valueRange = 50f..500f,
+                    title = "Press Duration (ms)",
+                    steps = 44,
+                    onValueChange = { value ->
+                        GeneralSettings.setValue("shake_press_duration", value.toInt())
+                        shakeDuration = value
+                    },
+                    valueContent = { PreferenceValue(text = shakeDuration.toInt().toString()) }
+                )
+            }
 
             item {
                 PreferenceHeader(stringResource(R.string.key_mappings))
