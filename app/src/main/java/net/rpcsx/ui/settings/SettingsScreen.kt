@@ -938,7 +938,7 @@ fun ControllerSettings(
                 SwitchPreference(
                     checked = motionEnabled,
                     title = "Enable Gyroscope Motion",
-                    description = "Maps tilt to Right Stick",
+                    subtitle = { Text("Maps device tilt to Right Stick") },
                     leadingIcon = null,
                     onClick = { value: Boolean ->
                         GeneralSettings.setValue("motion_sensor_enabled", value)
