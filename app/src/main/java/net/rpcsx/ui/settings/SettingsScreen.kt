@@ -851,6 +851,11 @@ fun ControllerSettings(
             mutableStateOf(GeneralSettings["motion_target_stick"] as? Int ?: 1)
         }
 
+        var showMotionModeDialog by remember { mutableStateOf(false) }
+        var selectedMotionMode by remember {
+            mutableStateOf(GeneralSettings["motion_mode"] as? String ?: "priority")
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -993,6 +998,27 @@ fun ControllerSettings(
                     value = { PreferenceValue(text = motionStickName) },
                     onClick = {
                         showMotionStickDialog = true
+                    }
+                )
+            }
+
+            item {
+                var motionModeName by remember {
+                    mutableStateOf(if (selectedMotionMode == "priority") "Priority" else "Sum")
+                }
+                RegularPreference(
+                    title = "Motion Mode",
+                    subtitle = { 
+                        Text(
+                            text = if (selectedMotionMode == "priority") 
+                                "Gyro only when stick not touched" 
+                            else 
+                                "Gyro adds to stick position"
+                        ) 
+                    },
+                    value = { PreferenceValue(text = motionModeName) },
+                    onClick = {
+                        showMotionModeDialog = true
                     }
                 )
             }
@@ -1148,6 +1174,53 @@ fun ControllerSettings(
                 },
                 confirmButton = {
                     TextButton(onClick = { showMotionStickDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showMotionModeDialog) {
+            AlertDialog(
+                onDismissRequest = { showMotionModeDialog = false },
+                title = { Text("Select Motion Mode") },
+                text = {
+                    Column {
+                        listOf(
+                            Triple("Priority", "priority", "Gyro only when virtual stick not touched"),
+                            Triple("Sum", "sum", "Gyro adds to virtual stick position")
+                        ).forEach { (name, mode, description) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedMotionMode = mode
+                                        GeneralSettings.setValue("motion_mode", mode)
+                                        showMotionModeDialog = false
+                                    }
+                                    .padding(8.dp)
+                            ) {
+                                Column {
+                                    Text(text = name, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        text = description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (mode == selectedMotionMode) {
+                                    Text(
+                                        text = " ✓",
+                                        modifier = Modifier.padding(start = 8.dp),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showMotionModeDialog = false }) {
                         Text("Cancel")
                     }
                 }
