@@ -867,7 +867,7 @@ fun ControllerSettings(
             }
 
             item {
-                PreferenceHeader("Shake Motion Emulation")
+                PreferenceHeader("Motion Sensors")
             }
 
             item {
@@ -878,7 +878,8 @@ fun ControllerSettings(
                 }
                 SwitchPreference(
                     checked = shakeEnabled,
-                    title = "Enable Shake Detection",
+                    title = "Shake Motion Emulation",
+                    subtitle = { Text("Emulate button press on device shake") },
                     leadingIcon = null,
                     onClick = { value: Boolean ->
                         GeneralSettings.setValue("shake_enabled", value)
@@ -926,10 +927,6 @@ fun ControllerSettings(
             }
 
             item {
-                PreferenceHeader("Full Gyroscope Support")
-            }
-
-            item {
                 var motionEnabled by remember {
                     mutableStateOf(
                         GeneralSettings["motion_sensor_enabled"] as Boolean? ?: false
@@ -937,7 +934,7 @@ fun ControllerSettings(
                 }
                 SwitchPreference(
                     checked = motionEnabled,
-                    title = "Enable Gyroscope Motion",
+                    title = "Gyroscope Motion (Right Stick)",
                     subtitle = { Text("Maps device tilt to Right Stick") },
                     leadingIcon = null,
                     onClick = { value: Boolean ->
@@ -1000,6 +997,11 @@ fun ControllerSettings(
                     }
                 }
                 .forEach { binding ->
+                    // Пропускаем тряску, если она не назначена (0, 0)
+                    if (binding.first == InputBindingPrefs.KEYCODE_SHAKE_MOTION && binding.second.first == 0 && binding.second.second == 0) {
+                        return@forEach
+                    }
+                    
                     item {
                         RegularPreference(
                             title = InputBindingPrefs.rpcsxKeyCodeToString(
