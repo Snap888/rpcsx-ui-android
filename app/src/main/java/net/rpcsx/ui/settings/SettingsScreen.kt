@@ -866,8 +866,9 @@ fun ControllerSettings(
                 )
             }
 
+            // --- НАСТРОЙКИ SHAKE (Тряска) ---
             item {
-                PreferenceHeader("Motion Sensors")
+                PreferenceHeader("Shake Motion Emulation")
             }
 
             item {
@@ -878,7 +879,7 @@ fun ControllerSettings(
                 }
                 SwitchPreference(
                     checked = shakeEnabled,
-                    title = "Shake Motion Emulation",
+                    title = "Enable Shake Detection",
                     leadingIcon = null,
                     onClick = { value ->
                         GeneralSettings.setValue("shake_enabled", value)
@@ -915,7 +916,7 @@ fun ControllerSettings(
                 SliderPreference(
                     value = shakeDuration,
                     valueRange = 50f..500f,
-                    title = "Press Duration (ms)",
+                    title = "Shake Press Duration (ms)",
                     steps = 44,
                     onValueChange = { value ->
                         GeneralSettings.setValue("shake_press_duration", value.toInt())
@@ -925,6 +926,68 @@ fun ControllerSettings(
                 )
             }
 
+            // --- НАСТРОЙКИ GYROSCOPE (Гироскоп) ---
+            item {
+                PreferenceHeader("Full Gyroscope Support")
+            }
+
+            item {
+                var motionEnabled by remember {
+                    mutableStateOf(
+                        GeneralSettings["motion_sensor_enabled"] as Boolean? ?: false
+                    )
+                }
+                SwitchPreference(
+                    checked = motionEnabled,
+                    title = "Enable Gyroscope Motion",
+                    description = "Maps tilt to Right Stick",
+                    leadingIcon = null,
+                    onClick = { value ->
+                        GeneralSettings.setValue("motion_sensor_enabled", value)
+                        motionEnabled = value
+                    }
+                )
+            }
+
+            item {
+                var motionSensitivity by remember {
+                    mutableStateOf(
+                        (GeneralSettings["motion_sensitivity"] as? Int)?.toFloat() ?: 50f
+                    )
+                }
+                SliderPreference(
+                    value = motionSensitivity,
+                    valueRange = 10f..150f,
+                    title = "Motion Sensitivity",
+                    steps = 139,
+                    onValueChange = { value ->
+                        GeneralSettings.setValue("motion_sensitivity", value.toInt())
+                        motionSensitivity = value
+                    },
+                    valueContent = { PreferenceValue(text = motionSensitivity.toInt().toString() + "%") }
+                )
+            }
+
+            item {
+                var deadZone by remember {
+                    mutableStateOf(
+                        (GeneralSettings["motion_deadzone"] as? Int)?.toFloat() ?: 5f
+                    )
+                }
+                SliderPreference(
+                    value = deadZone,
+                    valueRange = 0f..20f,
+                    title = "Dead Zone",
+                    steps = 19,
+                    onValueChange = { value ->
+                        GeneralSettings.setValue("motion_deadzone", value.toInt())
+                        deadZone = value
+                    },
+                    valueContent = { PreferenceValue(text = deadZone.toInt().toString() + "%") }
+                )
+            }
+
+            // --- КАРТЫ КЛАВИШ ---
             item {
                 PreferenceHeader(stringResource(R.string.key_mappings))
             }
