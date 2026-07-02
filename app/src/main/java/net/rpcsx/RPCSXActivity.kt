@@ -271,15 +271,13 @@ class RPCSXActivity : ComponentActivity() {
             }
         }
 
+        val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
+        val targetStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
+
         gamePadState.leftStickX = (event.getAxisValue(MotionEvent.AXIS_X) * 127 + 128).toInt()
         gamePadState.leftStickY = (event.getAxisValue(MotionEvent.AXIS_Y) * 127 + 128).toInt()
-        
-        // Правый стик: если гироскоп включен, не перезаписываем его значения
-        val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
-        if (!motionEnabled) {
-            gamePadState.rightStickX = (event.getAxisValue(MotionEvent.AXIS_Z) * 127 + 128).toInt()
-            gamePadState.rightStickY = (event.getAxisValue(MotionEvent.AXIS_RZ) * 127 + 128).toInt()
-        }
+        gamePadState.rightStickX = (event.getAxisValue(MotionEvent.AXIS_Z) * 127 + 128).toInt()
+        gamePadState.rightStickY = (event.getAxisValue(MotionEvent.AXIS_RZ) * 127 + 128).toInt()
 
         sendGamepadData()
         return true
@@ -290,14 +288,18 @@ class RPCSXActivity : ComponentActivity() {
         val finalDigital2 = gamePadState.digital[1] or RPCSX.shakeDigital2
         
         val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
-        val finalRightX = if (motionEnabled) RPCSX.motionRightStickX else gamePadState.rightStickX
-        val finalRightY = if (motionEnabled) RPCSX.motionRightStickY else gamePadState.rightStickY
+        val targetStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
+
+        val finalLeftX = if (motionEnabled && targetStick == 0) RPCSX.motionLeftStickX else gamePadState.leftStickX
+        val finalLeftY = if (motionEnabled && targetStick == 0) RPCSX.motionLeftStickY else gamePadState.leftStickY
+        val finalRightX = if (motionEnabled && targetStick == 1) RPCSX.motionRightStickX else gamePadState.rightStickX
+        val finalRightY = if (motionEnabled && targetStick == 1) RPCSX.motionRightStickY else gamePadState.rightStickY
 
         RPCSX.instance.overlayPadData(
             finalDigital1,
             finalDigital2,
-            gamePadState.leftStickX,
-            gamePadState.leftStickY,
+            finalLeftX,
+            finalLeftY,
             finalRightX,
             finalRightY
         )
