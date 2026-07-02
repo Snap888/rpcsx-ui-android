@@ -20,12 +20,6 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
     private val rotationMatrix = FloatArray(9)
     private val orientationValues = FloatArray(3)
 
-    // Глобальные переменные для хранения состояния стика (чтобы Activity могло их прочитать)
-    // По умолчанию центр (128)
-    var currentMotionX: Int = 128
-    var currentMotionY: Int = 128
-        private set
-
     private var lastUpdate = 0L
     private val updateInterval = 16L // ~60 FPS
 
@@ -50,16 +44,14 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
 
     fun stop() {
         sensorManager.unregisterListener(this)
-        // Сброс в центр при остановке
-        currentMotionX = 128
-        currentMotionY = 128
+        RPCSX.motionRightStickX = 128
+        RPCSX.motionRightStickY = 128
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null || !enabled) return
 
         val currentTime = System.currentTimeMillis()
-        // Ограничение частоты обновления для экономии батареи
         if (currentTime - lastUpdate < updateInterval) return
         lastUpdate = currentTime
 
@@ -74,7 +66,6 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun updateOrientation() {
-        // Получаем матрицу вращения на основе гравитации и магнитного поля
         val success = SensorManager.getRotationMatrix(
             rotationMatrix,
             null,
@@ -83,32 +74,20 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
         )
 
         if (success) {
-            // Вычисляем углы ориентации (0=азимут, 1=pitch, 2=roll)
             SensorManager.getOrientation(rotationMatrix, orientationValues)
 
-            // orientationValues[1] = Pitch (наклон вперед/назад) -> Y ось стика
-            // orientationValues[2] = Roll (наклон влево/вправо) -> X ось стика
-            
-            // Диапазон углов от -PI до PI. Преобразуем в 0..255
-            // Roll: -PI (лево) -> 0, 0 (центр) -> 128, PI (право) -> 255
             var rawX = ((orientationValues[2] / PI) * 127.5f + 127.5f).toInt()
-            // Pitch: -PI (вперед) -> 0, 0 (центр) -> 128, PI (назад) -> 255
-            // Инвертируем Y, так как наклон вперед обычно должен толкать стик вверх
             var rawY = ((-orientationValues[1] / PI) * 127.5f + 127.5f).toInt()
 
-            // Применяем чувствительность
             rawX = ((rawX - 128) * sensitivity + 128).toInt().coerceIn(0, 255)
             rawY = ((rawY - 128) * sensitivity + 128).toInt().coerceIn(0, 255)
 
-            // Применяем мертвую зону (чтобы стик не дрожал в центре)
             if (abs(rawX - 128) < deadZone * 128) rawX = 128
             if (abs(rawY - 128) < deadZone * 128) rawY = 128
 
-            // Обновляем глобальные значения, если они изменились
-            if (rawX != currentMotionX || rawY != currentMotionY) {
-                currentMotionX = rawX
-                currentMotionY = rawY
-            }
+            // Обновляем глобальные переменные RPCSX
+            RPCSX.motionRightStickX = rawX
+            RPCSX.motionRightStickY = rawY
         }
     }
 }
