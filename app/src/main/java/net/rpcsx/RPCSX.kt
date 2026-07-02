@@ -118,6 +118,7 @@ class RPCSX {
     external fun customConfigSet(serial: String, path: String, value: String): Boolean
     external fun customConfigImport(serial: String, yaml: String): Boolean
     external fun setCustomDriver(path: String, libraryName: String, hookDir: String): Boolean
+    external fun setGpuTurbo(on: Boolean)
 
     external fun rpcnGetConfig(): String
     external fun rpcnSetCredentials(npid: String, password: String, token: String)
@@ -131,7 +132,7 @@ class RPCSX {
     external fun rpcnTestConnection(): String
     external fun rpcnSetEnabled(enabled: Boolean)
     external fun rpcnIsEnabled(): Boolean
-
+    external fun rpcnLiveStatus(): String
 
     companion object {
         var initialized = false
