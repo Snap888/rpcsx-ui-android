@@ -17,20 +17,18 @@ class ShakeMotionDetector(
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     
-    // Фильтрованные значения для отделения тряски от наклона
     private val rawAccelerometerValues = FloatArray(3)
     private val filteredAccelerometerValues = FloatArray(3)
     
     private var shakeThreshold = 15.0f
-    private val debounceTime = 500L // Увеличено для предотвращения ложных срабатываний
+    private val debounceTime = 500L
     private var lastShakeTime = 0L
     private val handler = Handler(Looper.getMainLooper())
     
     private var isRegistered = false
     private var isShaking = false
     
-    // Low-pass filter для отделения гравитации от тряски
-    private val gravityAlpha = 0.8f // Высокое значение = сильная фильтрация гравитации
+    private val gravityAlpha = 0.8f
 
     fun start() {
         val enabled = (GeneralSettings["shake_enabled"] as? Boolean) ?: false
@@ -55,17 +53,14 @@ class ShakeMotionDetector(
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            // Сохраняем сырые значения
             rawAccelerometerValues[0] = event.values[0]
             rawAccelerometerValues[1] = event.values[1]
             rawAccelerometerValues[2] = event.values[2]
             
-            // Low-pass filter для выделения гравитации
             filteredAccelerometerValues[0] = gravityAlpha * filteredAccelerometerValues[0] + (1 - gravityAlpha) * rawAccelerometerValues[0]
             filteredAccelerometerValues[1] = gravityAlpha * filteredAccelerometerValues[1] + (1 - gravityAlpha) * rawAccelerometerValues[1]
             filteredAccelerometerValues[2] = gravityAlpha * filteredAccelerometerValues[2] + (1 - gravityAlpha) * rawAccelerometerValues[2]
             
-            // Вычисляем линейное ускорение (тряска) путем вычитания гравитации
             val linearX = rawAccelerometerValues[0] - filteredAccelerometerValues[0]
             val linearY = rawAccelerometerValues[1] - filteredAccelerometerValues[1]
             val linearZ = rawAccelerometerValues[2] - filteredAccelerometerValues[2]
@@ -74,7 +69,6 @@ class ShakeMotionDetector(
             
             val currentTime = System.currentTimeMillis()
             
-            // Проверяем только линейное ускорение (тряску), игнорируя гравитацию
             if (linearAcceleration > shakeThreshold && (currentTime - lastShakeTime) > debounceTime) {
                 lastShakeTime = currentTime
                 triggerShake()
