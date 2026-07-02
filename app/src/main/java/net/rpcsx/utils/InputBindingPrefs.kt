@@ -27,7 +27,7 @@ object InputBindingPrefs {
         KeyEvent.KEYCODE_BUTTON_THUMBL to Pair(Digital1Flags.CELL_PAD_CTRL_L3.bit, 0),
         KeyEvent.KEYCODE_BUTTON_THUMBR to Pair(Digital1Flags.CELL_PAD_CTRL_R3.bit, 0),
         666666 to Pair(Digital1Flags.CELL_PAD_CTRL_PS.bit, 0),
-        KEYCODE_SHAKE_MOTION to Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1)
+        KEYCODE_SHAKE_MOTION to Pair(0, 0) // По умолчанию тряска не назначена
     )
 
     fun saveBindings(bindings: Map<Int, Pair<Int, Int>>): Boolean {
