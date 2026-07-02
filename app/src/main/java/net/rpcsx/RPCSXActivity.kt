@@ -24,6 +24,7 @@ import net.rpcsx.overlay.State
 import net.rpcsx.utils.GeneralSettings
 import net.rpcsx.utils.InputBindingPrefs
 import net.rpcsx.utils.ShakeMotionDetector
+import net.rpcsx.utils.MotionSensorManager
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
@@ -37,6 +38,7 @@ class RPCSXActivity : ComponentActivity() {
     private val inputBindings by lazy { InputBindingPrefs.loadBindings() }
     
     private lateinit var shakeDetector: ShakeMotionDetector
+    private lateinit var motionSensorManager: MotionSensorManager
 
     private val watcherHandler = Handler(Looper.getMainLooper())
     private val stateWatcher = object : Runnable {
@@ -94,6 +96,8 @@ class RPCSXActivity : ComponentActivity() {
             injectShakeEvent(pressed)
         }
 
+        motionSensorManager = MotionSensorManager(this)
+
         val gamePath = intent.getStringExtra("path")!!
         RPCSX.lastPlayedGame = gamePath
 
@@ -139,11 +143,13 @@ class RPCSXActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         shakeDetector.start()
+        motionSensorManager.start()
     }
 
     override fun onPause() {
         super.onPause()
         shakeDetector.stop()
+        motionSensorManager.stop()
     }
 
     override fun onDestroy() {
@@ -277,13 +283,20 @@ class RPCSXActivity : ComponentActivity() {
         val finalDigital1 = gamePadState.digital[0] or RPCSX.shakeDigital1
         val finalDigital2 = gamePadState.digital[1] or RPCSX.shakeDigital2
         
+        // Проверка включен ли гироскоп
+        val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
+        
+        // Если гироскоп включен, используем данные с него для правого стика
+        val finalRightX = if (motionEnabled) RPCSX.motionRightStickX else gamePadState.rightStickX
+        val finalRightY = if (motionEnabled) RPCSX.motionRightStickY else gamePadState.rightStickY
+
         RPCSX.instance.overlayPadData(
             finalDigital1,
             finalDigital2,
             gamePadState.leftStickX,
             gamePadState.leftStickY,
-            gamePadState.rightStickX,
-            gamePadState.rightStickY
+            finalRightX,
+            finalRightY
         )
     }
 
