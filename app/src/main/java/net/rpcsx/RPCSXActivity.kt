@@ -23,6 +23,7 @@ import net.rpcsx.dialogs.AlertDialogQueue
 import net.rpcsx.overlay.State
 import net.rpcsx.utils.GeneralSettings
 import net.rpcsx.utils.InputBindingPrefs
+import net.rpcsx.utils.ShakeMotionDetector
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
@@ -34,18 +35,12 @@ class RPCSXActivity : ComponentActivity() {
     private var usesAxisR2 = false
     private var bootThread: Thread? = null
     private val inputBindings by lazy { InputBindingPrefs.loadBindings() }
+    
+    private lateinit var shakeDetector: ShakeMotionDetector
 
-    // Back-button policy: during gameplay the system back button opens the
-    // in-game quick (home) menu instead of exiting. Exit happens from that menu
-    // ("Exit Game"), which stops the emulator; the exit watcher then finishes
-    // this activity so we return to the library. Registered via the
-    // OnBackPressedDispatcher so it fires reliably on Android 13+ predictive
-    // back (overriding the deprecated onBackPressed() does not).
     private val watcherHandler = Handler(Looper.getMainLooper())
     private val stateWatcher = object : Runnable {
         override fun run() {
-            // Started only once the game is live (see startExitWatcher), so a
-            // Stopped state here means the user exited from the quick menu.
             if (RPCSX.getState() == EmulatorState.Stopped) {
                 finish()
                 return
@@ -63,10 +58,8 @@ class RPCSXActivity : ComponentActivity() {
         override fun handleOnBackPressed() {
             when (RPCSX.getState()) {
                 EmulatorState.Running, EmulatorState.Paused ->
-                    // open_home_menu is idempotent, so spamming back is harmless.
                     runCatching { RPCSX.instance.openHomeMenu() }
                 else ->
-                    // Not in active gameplay (booting/stopped): leave to library.
                     finish()
             }
         }
@@ -81,19 +74,9 @@ class RPCSXActivity : ComponentActivity() {
         enableFullScreenImmersive()
         onBackPressedDispatcher.addCallback(this, backCallback)
 
-        // Thermal-aware frame cap: cools the device under sustained load.
         net.rpcsx.utils.ThermalManager.register(this)
-
-        // ADPF scheduler hints (opt-in): feed real frame work to PerformanceHintManager
-        // so the SoC can run cooler at the same fps. No-op unless the toggle is on.
         net.rpcsx.utils.AdpfManager.register(this)
 
-        // Sustained performance mode caps the SoC to a PASSIVELY-sustainable clock.
-        // On an actively-cooled handheld (e.g. Retroid Pocket 6 has a fan) that just
-        // caps the peak fps we want, with little thermal upside since the fan handles
-        // cooling. Unproven to help our CPU/SPU-bound workload, so default OFF per the
-        // "don't default-on unverified features" rule. User-toggleable: enable it to
-        // trade peak fps for lower heat/fan on long sessions. No-op where unsupported.
         if ((GeneralSettings["sustained_performance"] as? Boolean) == true) {
             (getSystemService(POWER_SERVICE) as? PowerManager)?.let { pm ->
                 if (pm.isSustainedPerformanceModeSupported) {
@@ -105,6 +88,10 @@ class RPCSXActivity : ComponentActivity() {
         binding.oscToggle.setOnClickListener {
             binding.padOverlay.isInvisible = !binding.padOverlay.isInvisible
             binding.oscToggle.setImageResource(if (binding.padOverlay.isInvisible) R.drawable.ic_osc_off else R.drawable.ic_show_osc)
+        }
+
+        shakeDetector = ShakeMotionDetector(this) { pressed ->
+            injectShakeEvent(pressed)
         }
 
         val gamePath = intent.getStringExtra("path")!!
@@ -144,11 +131,19 @@ class RPCSXActivity : ComponentActivity() {
                 )
                 finish()
             } else {
-                // Game is live: from here a Stopped state means a deliberate exit
-                // (quick menu "Exit Game"), so it is safe to finish the activity.
                 runOnUiThread { startExitWatcher() }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        shakeDetector.start()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        shakeDetector.stop()
     }
 
     override fun onDestroy() {
@@ -158,28 +153,22 @@ class RPCSXActivity : ComponentActivity() {
         net.rpcsx.utils.ThermalManager.unregister()
         net.rpcsx.utils.AdpfManager.unregister()
         unregisterUsbEventListener()
-        // Never block the UI thread here. The boot thread can be parked inside the
-        // blocking native RPCSX.boot() call (a first-boot PPU precompile runs for
-        // minutes); Thread.interrupt() cannot break a native JNI call, so joining it
-        // on the main thread froze the UI -> ANR ("Waited 5000ms for MotionEvent")
-        // when the user backed out of a still-compiling first boot and then touched
-        // the screen / recents. Both activities share this one main thread, so the
-        // stall surfaces as a MainActivity input-dispatch ANR.
-        //
-        // Signal the core to stop so the in-flight precompile aborts (Emu.Kill is
-        // idempotent and honored by the precompile's Emu.IsStopped() checks), then
-        // drain the boot thread on a detached worker so onDestroy returns at once.
-        val threadToDrain = bootThread
-        bootThread = null
-        if (threadToDrain != null) {
-            thread(isDaemon = true, name = "rpcsx-boot-drain") {
-                runCatching { RPCSX.instance.kill() }
-                threadToDrain.interrupt()
-                runCatching { threadToDrain.join() }
-            }
-        }
+        bootThread?.interrupt()
+        bootThread?.join()
     }
 
+    private fun injectShakeEvent(pressed: Boolean) {
+        val padBit = inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION] ?: return
+        if (padBit.first == 0) return
+        
+        if (pressed) {
+            RPCSX.shakeDigital1 = if (padBit.second == 0) padBit.first else 0
+            RPCSX.shakeDigital2 = if (padBit.second == 1) padBit.first else 0
+        } else {
+            RPCSX.shakeDigital1 = 0
+            RPCSX.shakeDigital2 = 0
+        }
+    }
 
     private fun keyCodeToPadBit(keyCode: Int): Pair<Int, Int> {
         val event = inputBindings[keyCode] ?: Pair(0, 0)
@@ -210,7 +199,7 @@ class RPCSXActivity : ComponentActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
-        if (event == null || event.source and (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_DPAD) == 0) {
+        if (event == null || event.source and InputDevice.SOURCE_JOYSTICK != InputDevice.SOURCE_JOYSTICK) {
             return super.onKeyUp(keyCode, event)
         }
 
@@ -285,9 +274,12 @@ class RPCSXActivity : ComponentActivity() {
     }
 
     private fun sendGamepadData() {
+        val finalDigital1 = gamePadState.digital[0] or RPCSX.shakeDigital1
+        val finalDigital2 = gamePadState.digital[1] or RPCSX.shakeDigital2
+        
         RPCSX.instance.overlayPadData(
-            gamePadState.digital[0],
-            gamePadState.digital[1],
+            finalDigital1,
+            finalDigital2,
             gamePadState.leftStickX,
             gamePadState.leftStickY,
             gamePadState.rightStickX,
@@ -298,11 +290,6 @@ class RPCSXActivity : ComponentActivity() {
     private fun enableFullScreenImmersive() {
         with(window) {
             WindowCompat.setDecorFitsSystemWindows(this, false)
-            // Keep the screen on while a game is up: a large title's first-launch PPU
-            // precompile (e.g. The Sims 3: 152 modules / 990k blocks) can run for many
-            // minutes with the game on screen; without this the display can sleep and
-            // the user force-closes thinking it hung.
-            addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             val insetsController = WindowInsetsControllerCompat(this, decorView)
             insetsController.apply {
                 hide(WindowInsetsCompat.Type.systemBars())
@@ -316,8 +303,6 @@ class RPCSXActivity : ComponentActivity() {
 
     private fun applyInsetsToPadOverlay() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.padOverlay) { view, windowInsets ->
-            // I don't think we need `displayCutout` insets here as well
-            // Since there is hardly any overlay overlapping with it
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.updateLayoutParams<MarginLayoutParams> {
                 leftMargin = insets.left
