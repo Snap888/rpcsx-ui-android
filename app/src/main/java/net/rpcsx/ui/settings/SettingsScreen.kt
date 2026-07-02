@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -79,8 +80,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
-import net.rpcsx.Digital1Flags
-import net.rpcsx.Digital2Flags
 import net.rpcsx.ui.settings.components.core.PreferenceHeader
 import net.rpcsx.ui.settings.components.core.PreferenceIcon
 import net.rpcsx.ui.settings.components.core.PreferenceValue
@@ -93,6 +92,8 @@ import net.rpcsx.ui.settings.components.preference.SwitchPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.rpcsx.Digital1Flags
+import net.rpcsx.Digital2Flags
 import net.rpcsx.R
 import net.rpcsx.RPCSX
 import net.rpcsx.UserRepository
@@ -573,7 +574,7 @@ fun SettingsScreen(
         val configPicker = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
             onResult = { uri: Uri? ->
-                uri?.let {
+                uri?.let { 
                     if (FileUtil.importConfig(context, it))
                         onRefresh()
                 }
@@ -586,7 +587,7 @@ fun SettingsScreen(
                 uri?.let { FileUtil.exportConfig(context, it) }
             }
         )
-
+        
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -695,7 +696,7 @@ fun SettingsScreen(
                                 dismissText = ""
                             )
                         }
-                    }
+                    }  
                 )
             }
 
@@ -842,7 +843,14 @@ fun ControllerSettings(
         val requester = remember { FocusRequester() }
 
         var showShakeButtonDialog by remember { mutableStateOf(false) }
+        var selectedShakeButton by remember {
+            mutableStateOf(inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION] ?: Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1))
+        }
+
         var showMotionStickDialog by remember { mutableStateOf(false) }
+        var selectedMotionStick by remember {
+            mutableStateOf(GeneralSettings["motion_target_stick"] as? Int ?: 1)
+        }
 
         LazyColumn(
             modifier = Modifier
@@ -893,15 +901,22 @@ fun ControllerSettings(
                     onClick = { value: Boolean ->
                         GeneralSettings.setValue("shake_enabled", value)
                         shakeEnabled = value
+                        if (value) {
+                            showShakeButtonDialog = true
+                        }
                     }
                 )
             }
 
             item {
-                val shakeBinding = inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION]
-                    ?: Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1)
-                val shakeButtonName = InputBindingPrefs.getButtonName(shakeBinding.first, shakeBinding.second)
-
+                var shakeButtonName by remember {
+                    mutableStateOf(
+                        InputBindingPrefs.getButtonName(
+                            selectedShakeButton.first,
+                            selectedShakeButton.second
+                        )
+                    )
+                }
                 RegularPreference(
                     title = "Shake Button",
                     value = { PreferenceValue(text = shakeButtonName) },
@@ -958,19 +973,22 @@ fun ControllerSettings(
                 SwitchPreference(
                     checked = motionEnabled,
                     title = "Gyroscope Motion",
-                    subtitle = { Text("Maps device tilt to analog stick") },
+                    subtitle = { Text("Maps device tilt to stick") },
                     leadingIcon = null,
                     onClick = { value: Boolean ->
                         GeneralSettings.setValue("motion_sensor_enabled", value)
                         motionEnabled = value
+                        if (value) {
+                            showMotionStickDialog = true
+                        }
                     }
                 )
             }
 
             item {
-                val motionStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
-                val motionStickName = if (motionStick == 0) "Left Stick" else "Right Stick"
-
+                var motionStickName by remember {
+                    mutableStateOf(if (selectedMotionStick == 0) "Left Stick" else "Right Stick")
+                }
                 RegularPreference(
                     title = "Motion Target Stick",
                     value = { PreferenceValue(text = motionStickName) },
@@ -1036,7 +1054,7 @@ fun ControllerSettings(
                     if (binding.first == InputBindingPrefs.KEYCODE_SHAKE_MOTION) {
                         return@forEach
                     }
-
+                    
                     item {
                         RegularPreference(
                             title = InputBindingPrefs.rpcsxKeyCodeToString(
@@ -1069,31 +1087,23 @@ fun ControllerSettings(
                 text = {
                     Column {
                         InputBindingPrefs.availableButtons.forEach { (name, button) ->
-                            val currentShakeBinding = inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION]
-                                ?: Pair(Digital2Flags.CELL_PAD_CTRL_L2.bit, 1)
-                            val isSelected = button.first == currentShakeBinding.first && button.second == currentShakeBinding.second
-
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        selectedShakeButton = button
                                         inputBindings[InputBindingPrefs.KEYCODE_SHAKE_MOTION] = button
                                         InputBindingPrefs.saveBindings(inputBindings.toMap())
                                         showShakeButtonDialog = false
                                     }
-                                    .padding(vertical = 12.dp, horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(8.dp)
                             ) {
-                                Text(
-                                    text = name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (isSelected) {
-                                    Text(
-                                        text = "\u2713",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.titleMedium
+                                Text(text = name)
+                                if (button == selectedShakeButton) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_check),
+                                        contentDescription = null
                                     )
                                 }
                             }
@@ -1102,44 +1112,35 @@ fun ControllerSettings(
                 },
                 confirmButton = {
                     TextButton(onClick = { showShakeButtonDialog = false }) {
-                        Text(stringResource(R.string.cancel))
+                        Text("Cancel")
                     }
                 }
             )
         }
 
         if (showMotionStickDialog) {
-            val currentStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
-            val stickOptions = listOf(Pair("Left Stick", 0), Pair("Right Stick", 1))
-
             AlertDialog(
                 onDismissRequest = { showMotionStickDialog = false },
                 title = { Text("Select Motion Target Stick") },
                 text = {
                     Column {
-                        stickOptions.forEach { (name, stick) ->
-                            val isSelected = stick == currentStick
-
+                        listOf(Pair("Left Stick", 0), Pair("Right Stick", 1)).forEach { (name, stick) ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        selectedMotionStick = stick
                                         GeneralSettings.setValue("motion_target_stick", stick)
                                         showMotionStickDialog = false
                                     }
-                                    .padding(vertical = 12.dp, horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(8.dp)
                             ) {
-                                Text(
-                                    text = name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (isSelected) {
-                                    Text(
-                                        text = "\u2713",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.titleMedium
+                                Text(text = name)
+                                if (stick == selectedMotionStick) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_check),
+                                        contentDescription = null
                                     )
                                 }
                             }
@@ -1148,7 +1149,7 @@ fun ControllerSettings(
                 },
                 confirmButton = {
                     TextButton(onClick = { showMotionStickDialog = false }) {
-                        Text(stringResource(R.string.cancel))
+                        Text("Cancel")
                     }
                 }
             )
