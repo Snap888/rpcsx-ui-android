@@ -147,7 +147,8 @@ class RPCSX {
         var shakeDigital1: Int = 0
         var shakeDigital2: Int = 0
 
-        // Переменные для хранения состояния гироскопа (значения стика 0-255)
+        var motionLeftStickX: Int = 128
+        var motionLeftStickY: Int = 128
         var motionRightStickX: Int = 128
         var motionRightStickY: Int = 128
 
