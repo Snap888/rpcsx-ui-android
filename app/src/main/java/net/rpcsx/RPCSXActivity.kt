@@ -174,6 +174,7 @@ class RPCSXActivity : ComponentActivity() {
             RPCSX.shakeDigital1 = 0
             RPCSX.shakeDigital2 = 0
         }
+        sendGamepadData()
     }
 
     private fun keyCodeToPadBit(keyCode: Int): Pair<Int, Int> {
@@ -272,8 +273,13 @@ class RPCSXActivity : ComponentActivity() {
 
         gamePadState.leftStickX = (event.getAxisValue(MotionEvent.AXIS_X) * 127 + 128).toInt()
         gamePadState.leftStickY = (event.getAxisValue(MotionEvent.AXIS_Y) * 127 + 128).toInt()
-        gamePadState.rightStickX = (event.getAxisValue(MotionEvent.AXIS_Z) * 127 + 128).toInt()
-        gamePadState.rightStickY = (event.getAxisValue(MotionEvent.AXIS_RZ) * 127 + 128).toInt()
+        
+        // Правый стик: если гироскоп включен, не перезаписываем его значения
+        val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
+        if (!motionEnabled) {
+            gamePadState.rightStickX = (event.getAxisValue(MotionEvent.AXIS_Z) * 127 + 128).toInt()
+            gamePadState.rightStickY = (event.getAxisValue(MotionEvent.AXIS_RZ) * 127 + 128).toInt()
+        }
 
         sendGamepadData()
         return true
@@ -283,10 +289,7 @@ class RPCSXActivity : ComponentActivity() {
         val finalDigital1 = gamePadState.digital[0] or RPCSX.shakeDigital1
         val finalDigital2 = gamePadState.digital[1] or RPCSX.shakeDigital2
         
-        // Проверка включен ли гироскоп
         val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
-        
-        // Если гироскоп включен, используем данные с него для правого стика
         val finalRightX = if (motionEnabled) RPCSX.motionRightStickX else gamePadState.rightStickX
         val finalRightY = if (motionEnabled) RPCSX.motionRightStickY else gamePadState.rightStickY
 
