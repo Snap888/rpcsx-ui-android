@@ -36,7 +36,7 @@ enum class EmulatorState {
     Stopping,
     Running,
     Paused,
-    Frozen, // paused but cannot resume
+    Frozen,
     Ready,
     Starting;
 
@@ -73,8 +73,6 @@ class RPCSX {
     external fun openLibrary(path: String): Boolean
     external fun getLibraryVersion(path: String): String?
     external fun initialize(rootDir: String, user: String): Boolean
-    // Additive: tells the core the app-private dir for secrets (rpcn.yml).
-    // No-ops on older core .so builds that lack the symbol.
     external fun setRpcnConfigDir(internalDir: String)
     external fun installFw(fd: Int, progressId: Long): Boolean
     external fun install(fd: Int, progressId: Long): Boolean
@@ -120,23 +118,17 @@ class RPCSX {
     external fun customConfigSet(serial: String, path: String, value: String): Boolean
     external fun customConfigImport(serial: String, yaml: String): Boolean
     external fun setCustomDriver(path: String, libraryName: String, hookDir: String): Boolean
-    external fun setGpuTurbo(on: Boolean)
 
-    // RPCN (community-PSN online play). All of these may block on network and
-    // MUST be called off the main thread (Dispatchers.IO). The C++ side is
-    // implemented separately by the core build; until then these resolve at
-    // link time so every caller wraps them in runCatching to stay crash-proof.
-    external fun rpcnGetConfig(): String              // JSON {"host","npid","password","token"}
+    external fun rpcnGetConfig(): String
     external fun rpcnSetCredentials(npid: String, password: String, token: String)
-    external fun rpcnGetHosts(): String               // JSON [{"description","host"}]
+    external fun rpcnGetHosts(): String
     external fun rpcnAddHost(description: String, host: String): Boolean
     external fun rpcnRemoveHost(host: String): Boolean
     external fun rpcnSetActiveHost(host: String)
     external fun rpcnGetActiveHost(): String
     external fun rpcnCreateAccount(npid: String, password: String, onlineName: String, email: String, country: String): String
-    external fun rpcnResendToken(): String            // "" success else error
-    external fun rpcnTestConnection(): String         // "" success else error
-    external fun rpcnLiveStatus(): String             // "online" | "connecting" | "offline" (non-blocking)
+    external fun rpcnResendToken(): String
+    external fun rpcnTestConnection(): String
     external fun rpcnSetEnabled(enabled: Boolean)
     external fun rpcnIsEnabled(): Boolean
 
@@ -150,6 +142,9 @@ class RPCSX {
         var activeGame = mutableStateOf<String?>(null)
         var state = mutableStateOf(EmulatorState.Stopped)
         var activeLibrary = mutableStateOf<String?>(null)
+        
+        var shakeDigital1: Int = 0
+        var shakeDigital2: Int = 0
 
         fun boot(path: String): BootResult {
             return BootResult.fromInt(instance.boot(path))
