@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -1100,10 +1099,10 @@ fun ControllerSettings(
                             ) {
                                 Text(text = name)
                                 if (button == selectedShakeButton) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_check),
-                                        contentDescription = null
+                                    Text(
+                                        text = " ✓",
+                                        modifier = Modifier.padding(start = 8.dp),
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
@@ -1137,10 +1136,10 @@ fun ControllerSettings(
                             ) {
                                 Text(text = name)
                                 if (stick == selectedMotionStick) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_check),
-                                        contentDescription = null
+                                    Text(
+                                        text = " ✓",
+                                        modifier = Modifier.padding(start = 8.dp),
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
