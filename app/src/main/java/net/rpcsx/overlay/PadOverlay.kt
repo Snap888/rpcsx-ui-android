@@ -35,10 +35,10 @@ private const val idleAlpha = (0.3 * 255).toInt()
 
 data class State(
     val digital: IntArray = IntArray(2),
-    var leftStickX: Int = 127,
-    var leftStickY: Int = 127,
-    var rightStickX: Int = 127,
-    var rightStickY: Int = 127
+    var leftStickX: Int = 128,
+    var leftStickY: Int = 128,
+    var rightStickX: Int = 128,
+    var rightStickY: Int = 128
 )
 interface PadOverlayItem {
     fun draw(canvas: Canvas)
@@ -388,16 +388,55 @@ class PadOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(context,
                 }
             }
 
-            val finalDigital1 = state.digital[0] or RPCSX.shakeDigital1
-            val finalDigital2 = state.digital[1] or RPCSX.shakeDigital2
+            // Учитываем гироскоп при отправке данных
+            val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
+            val targetStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
+            val motionMode = GeneralSettings["motion_mode"] as? String ?: "priority"
+            
+            var finalLeftX = state.leftStickX
+            var finalLeftY = state.leftStickY
+            var finalRightX = state.rightStickX
+            var finalRightY = state.rightStickY
+            
+            if (motionEnabled) {
+                if (targetStick == 0) {
+                    // Гироскоп → левый стик
+                    if (motionMode == "priority") {
+                        if (!leftStick.isActive() && !isStickActiveInFloating(0)) {
+                            finalLeftX = RPCSX.motionLeftStickX
+                            finalLeftY = RPCSX.motionLeftStickY
+                        }
+                    } else {
+                        // Sum mode
+                        val motionX = RPCSX.motionLeftStickX - 128
+                        val motionY = RPCSX.motionLeftStickY - 128
+                        finalLeftX = (state.leftStickX + motionX).coerceIn(0, 255)
+                        finalLeftY = (state.leftStickY + motionY).coerceIn(0, 255)
+                    }
+                } else {
+                    // Гироскоп → правый стик
+                    if (motionMode == "priority") {
+                        if (!rightStick.isActive() && !isStickActiveInFloating(1)) {
+                            finalRightX = RPCSX.motionRightStickX
+                            finalRightY = RPCSX.motionRightStickY
+                        }
+                    } else {
+                        // Sum mode
+                        val motionX = RPCSX.motionRightStickX - 128
+                        val motionY = RPCSX.motionRightStickY - 128
+                        finalRightX = (state.rightStickX + motionX).coerceIn(0, 255)
+                        finalRightY = (state.rightStickY + motionY).coerceIn(0, 255)
+                    }
+                }
+            }
 
             RPCSX.instance.overlayPadData(
-                finalDigital1,
-                finalDigital2,
-                state.leftStickX,
-                state.leftStickY,
-                state.rightStickX,
-                state.rightStickY
+                state.digital[0] or RPCSX.shakeDigital1,
+                state.digital[1] or RPCSX.shakeDigital2,
+                finalLeftX,
+                finalLeftY,
+                finalRightX,
+                finalRightY
             )
 
             if (!hit && (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN)) {
@@ -433,6 +472,15 @@ class PadOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(context,
             hit || performClick()
         }
     }
+
+    // Проверка активности стика в floatingSticks
+    private fun isStickActiveInFloating(index: Int): Boolean {
+        return floatingSticks[index]?.isActive() == true
+    }
+
+    // Публичные методы для проверки активности стиков (используются в RPCSXActivity)
+    fun leftStickActive(): Boolean = leftStick.isActive() || floatingSticks[0]?.isActive() == true
+    fun rightStickActive(): Boolean = rightStick.isActive() || floatingSticks[1]?.isActive() == true
 
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
