@@ -14,34 +14,41 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
+    // Сырые данные
     private val accelerometerValues = FloatArray(3)
-    private val magnetometerValues = FloatArray(3)
     private val gyroscopeValues = FloatArray(3)
-    private val rotationMatrix = FloatArray(9)
-    private val orientationValues = FloatArray(3)
     
-    // Фильтрованные значения для плавности
-    private var filteredPitch = 0f
-    private var filteredRoll = 0f
+    // Интегрированные углы из гироскопа (в радианах)
+    private var integratedPitch = 0f  // наклон вперёд/назад
+    private var integratedRoll = 0f   // наклон влево/вправо
     
-    // Калибровка дрейфа
+    // Корректирующие углы из акселерометра (для компенсации дрейфа гироскопа)
+    private var accelPitch = 0f
+    private var accelRoll = 0f
+    
+    // Калибровка нулевого положения
     private var pitchOffset = 0f
     private var rollOffset = 0f
+    private var calibrationSamples = 0
+    private var calibrationSumPitch = 0f
+    private var calibrationSumRoll = 0f
     private var isCalibrated = false
     
-    // Low-pass filter coefficients
-    private val alpha = 0.15f // Чем меньше, тем плавнее (0.1-0.2 оптимально)
+    // Timestamp для интеграции
+    private var lastTimestamp = 0L
     
-    private var lastUpdate = 0L
-    private val updateInterval = 16L // ~60 FPS
-
+    // Настройки
     private var enabled = false
     private var sensitivity = 1.0f
     private var deadZone = 0.05f
     private var targetStick = 1 // 0 = left, 1 = right
+    
+    // Параметры фильтра
+    private val gyroDriftCorrection = 0.02f // Комплементарный фильтр: 2% акселерометр, 98% гироскоп
+    private val maxAngle = PI.toFloat() / 2f // Максимальный угол ±90°
+    private val gyroDeadZone = 0.01f // Мертвая зона для гироскопа (рад/с)
 
     fun start() {
         enabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
@@ -51,13 +58,19 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
         deadZone = ((GeneralSettings["motion_deadzone"] as? Int) ?: 5) / 100.0f
         targetStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
         
-        // Калибровка при старте
-        calibrate()
+        // Сброс состояния
+        integratedPitch = 0f
+        integratedRoll = 0f
+        calibrationSamples = 0
+        calibrationSumPitch = 0f
+        calibrationSumRoll = 0f
+        isCalibrated = false
+        lastTimestamp = 0L
+        
+        // Запускаем калибровку
+        startCalibration()
 
         accelerometer?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
-        magnetometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
         gyroscope?.let {
@@ -71,138 +84,136 @@ class MotionSensorManager(private val context: Context) : SensorEventListener {
         RPCSX.motionLeftStickY = 128
         RPCSX.motionRightStickX = 128
         RPCSX.motionRightStickY = 128
-        isCalibrated = false
     }
     
-    private fun calibrate() {
-        // Собираем средние значения за 1 секунду для компенсации дрейфа
-        var sumPitch = 0f
-        var sumRoll = 0f
-        var count = 0
-        
-        val calibrateRunnable = object : Runnable {
-            override fun run() {
-                if (count < 60) { // 60 samples = 1 second at 60 FPS
-                    sumPitch += orientationValues[1]
-                    sumRoll += orientationValues[2]
-                    count++
-                    accelerometer?.let {
-                        sensorManager.registerListener(this@MotionSensorManager, it, SensorManager.SENSOR_DELAY_GAME)
-                    }
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this, 16)
-                } else {
-                    pitchOffset = sumPitch / count
-                    rollOffset = sumRoll / count
-                    isCalibrated = true
-                }
+    private fun startCalibration() {
+        // Собираем 100 сэмплов для определения нулевого положения
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (calibrationSamples > 10) {
+                pitchOffset = calibrationSumPitch / calibrationSamples
+                rollOffset = calibrationSumRoll / calibrationSamples
+                isCalibrated = true
             }
-        }
-        
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(calibrateRunnable, 100)
+        }, 1500)
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null || !enabled) return
 
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastUpdate < updateInterval) return
-        lastUpdate = currentTime
-
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                // Low-pass filter для сглаживания
-                accelerometerValues[0] = alpha * event.values[0] + (1 - alpha) * accelerometerValues[0]
-                accelerometerValues[1] = alpha * event.values[1] + (1 - alpha) * accelerometerValues[1]
-                accelerometerValues[2] = alpha * event.values[2] + (1 - alpha) * accelerometerValues[2]
-            }
-            Sensor.TYPE_MAGNETIC_FIELD -> {
-                magnetometerValues[0] = alpha * event.values[0] + (1 - alpha) * magnetometerValues[0]
-                magnetometerValues[1] = alpha * event.values[1] + (1 - alpha) * magnetometerValues[1]
-                magnetometerValues[2] = alpha * event.values[2] + (1 - alpha) * magnetometerValues[2]
+                // Low-pass filter для акселерометра (выделяем гравитацию)
+                val alpha = 0.8f
+                accelerometerValues[0] = alpha * accelerometerValues[0] + (1 - alpha) * event.values[0]
+                accelerometerValues[1] = alpha * accelerometerValues[1] + (1 - alpha) * event.values[1]
+                accelerometerValues[2] = alpha * accelerometerValues[2] + (1 - alpha) * event.values[2]
+                
+                // Вычисляем углы из акселерометра (для калибровки и коррекции дрейфа)
+                val ax = accelerometerValues[0]
+                val ay = accelerometerValues[1]
+                val az = accelerometerValues[2]
+                
+                accelPitch = kotlin.math.atan2(-ax, kotlin.math.sqrt(ay * ay + az * az))
+                accelRoll = kotlin.math.atan2(ay, az)
+                
+                // Сбор данных для калибровки
+                if (!isCalibrated) {
+                    calibrationSumPitch += accelPitch
+                    calibrationSumRoll += accelRoll
+                    calibrationSamples++
+                }
             }
             Sensor.TYPE_GYROSCOPE -> {
-                gyroscopeValues[0] = event.values[0]
-                gyroscopeValues[1] = event.values[1]
-                gyroscopeValues[2] = event.values[2]
+                // Вычисляем dt
+                val currentTime = event.timestamp / 1_000_000L // наносекунды → миллисекунды
+                if (lastTimestamp == 0L) {
+                    lastTimestamp = currentTime
+                    return
+                }
+                val dt = (currentTime - lastTimestamp) / 1000f // мс → секунды
+                lastTimestamp = currentTime
+                
+                // Применяем мертвую зону к гироскопу
+                val gyroX = if (abs(event.values[0]) > gyroDeadZone) event.values[0] else 0f
+                val gyroY = if (abs(event.values[1]) > gyroDeadZone) event.values[1] else 0f
+                val gyroZ = event.values[2]
+                
+                // Интегрируем угловую скорость → получаем угол
+                // gyroY = pitch rate (наклон вперёд/назад)
+                // gyroX = roll rate (наклон влево/вправо)
+                integratedPitch += gyroY * dt
+                integratedRoll += gyroX * dt
+                
+                // Комплементарный фильтр: корректируем дрейф гироскопа акселерометром
+                if (isCalibrated) {
+                    val correctedAccelPitch = accelPitch - pitchOffset
+                    val correctedAccelRoll = accelRoll - rollOffset
+                    
+                    integratedPitch = (1 - gyroDriftCorrection) * integratedPitch + gyroDriftCorrection * correctedAccelPitch
+                    integratedRoll = (1 - gyroDriftCorrection) * integratedRoll + gyroDriftCorrection * correctedAccelRoll
+                }
+                
+                // Ограничиваем углы
+                integratedPitch = integratedPitch.coerceIn(-maxAngle, maxAngle)
+                integratedRoll = integratedRoll.coerceIn(-maxAngle, maxAngle)
+                
+                // Обновляем позицию стика
+                updateStickPosition()
             }
         }
-
-        updateOrientation()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    private fun updateOrientation() {
-        val success = SensorManager.getRotationMatrix(
-            rotationMatrix,
-            null,
-            accelerometerValues,
-            magnetometerValues
-        )
+    private fun updateStickPosition() {
+        // Преобразуем углы в позицию стика (0-255)
+        // Roll: -90° (лево) → 0, 0° (центр) → 128, +90° (право) → 255
+        // Pitch: -90° (вперёд) → 255, 0° (центр) → 128, +90° (назад) → 0
+        var rawX = ((integratedRoll / maxAngle) * 127.5f + 127.5f).toInt()
+        var rawY = ((-integratedPitch / maxAngle) * 127.5f + 127.5f).toInt()
 
-        if (success) {
-            SensorManager.getOrientation(rotationMatrix, orientationValues)
+        // Применяем нелинейную чувствительность
+        rawX = applyNonLinearSensitivity(rawX, sensitivity)
+        rawY = applyNonLinearSensitivity(rawY, sensitivity)
 
-            // Применяем калибровку дрейфа
-            val rawPitch = if (isCalibrated) orientationValues[1] - pitchOffset else orientationValues[1]
-            val rawRoll = if (isCalibrated) orientationValues[2] - rollOffset else orientationValues[2]
-            
-            // Low-pass filter для плавности
-            filteredPitch = alpha * rawPitch + (1 - alpha) * filteredPitch
-            filteredRoll = alpha * rawRoll + (1 - alpha) * filteredRoll
+        // Применяем плавную мертвую зону
+        rawX = applySmoothDeadZone(rawX, deadZone)
+        rawY = applySmoothDeadZone(rawY, deadZone)
 
-            // Преобразуем в значения стика (0-255)
-            var rawX = ((filteredRoll / PI) * 127.5f + 127.5f).toInt()
-            var rawY = ((-filteredPitch / PI) * 127.5f + 127.5f).toInt()
+        // Ограничиваем диапазон
+        rawX = rawX.coerceIn(0, 255)
+        rawY = rawY.coerceIn(0, 255)
 
-            // Применяем нелинейную чувствительность (ease-in curve)
-            rawX = applyNonLinearSensitivity(rawX, sensitivity)
-            rawY = applyNonLinearSensitivity(rawY, sensitivity)
-
-            // Применяем улучшенную мертвую зону с плавным переходом
-            rawX = applySmoothDeadZone(rawX, deadZone)
-            rawY = applySmoothDeadZone(rawY, deadZone)
-
-            // Ограничиваем диапазон
-            rawX = rawX.coerceIn(0, 255)
-            rawY = rawY.coerceIn(0, 255)
-
-            // Обновляем нужный стик
-            if (targetStick == 0) {
-                RPCSX.motionLeftStickX = rawX
-                RPCSX.motionLeftStickY = rawY
-            } else {
-                RPCSX.motionRightStickX = rawX
-                RPCSX.motionRightStickY = rawY
-            }
+        // Обновляем нужный стик
+        if (targetStick == 0) {
+            RPCSX.motionLeftStickX = rawX
+            RPCSX.motionLeftStickY = rawY
+        } else {
+            RPCSX.motionRightStickX = rawX
+            RPCSX.motionRightStickY = rawY
         }
     }
     
     private fun applyNonLinearSensitivity(value: Int, sensitivity: Float): Int {
-        // Нормализуем к -1..1
         val normalized = (value - 128) / 127.5f
-        
-        // Применяем ease-in кривую для более точного управления в центре
-        val eased = sign(normalized) * kotlin.math.pow(abs(normalized), 1.0f / sensitivity)
-        
-        // Возвращаем к диапазону 0-255
+        val exponent = 1.0f / (sensitivity.coerceIn(0.2f, 3.0f))
+        val eased = sign(normalized) * kotlin.math.pow(abs(normalized), exponent)
         return (eased * 127.5f + 128).toInt()
     }
     
     private fun applySmoothDeadZone(value: Int, deadZone: Float): Int {
         val center = 128
         val distance = value - center
-        val deadZoneSize = deadZone * 128
+        val deadZoneSize = (deadZone * 128).toInt()
         
         if (abs(distance) < deadZoneSize) {
             return center
         }
         
-        // Плавный переход после мертвой зоны
         val sign = sign(distance.toFloat())
         val adjustedDistance = abs(distance) - deadZoneSize
         val maxDistance = 128 - deadZoneSize
         
-        return (center + sign * (adjustedDistance / maxDistance) * (128 - deadZoneSize)).toInt()
+        return (center + sign * (adjustedDistance.toFloat() / maxDistance) * (128 - deadZoneSize)).toInt()
     }
 }
