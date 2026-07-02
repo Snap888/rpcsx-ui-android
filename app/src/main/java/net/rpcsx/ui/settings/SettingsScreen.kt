@@ -279,7 +279,7 @@ fun AdvancedSettingsScreen(
                                 checked = itemValue,
                                 title = key + if (itemValue == def) "" else " *",
                                 leadingIcon = null,
-                                onClick = { value ->
+                                onClick = { value: Boolean ->
                                     if (!RPCSX.instance.settingsSet(
                                             itemPath, if (value) "true" else "false"
                                         )
@@ -335,7 +335,7 @@ fun AdvancedSettingsScreen(
                                 values = variants,
                                 icon = null,
                                 title = key + if (itemValue == def) "" else " *",
-                                onValueChange = { value ->
+                                onValueChange = { value: String ->
                                     if (!RPCSX.instance.settingsSet(
                                             itemPath, "\"" + value + "\""
                                         )
@@ -397,7 +397,7 @@ fun AdvancedSettingsScreen(
                                     valueRange = min.toFloat()..max.toFloat(),
                                     title = key + if (itemValue == def) "" else " *",
                                     steps = (max - min).toInt() - 1,
-                                    onValueChange = { value ->
+                                    onValueChange = { value: Float ->
                                         if (!RPCSX.instance.settingsSet(
                                                 itemPath, value.toLong().toString()
                                             )
@@ -468,7 +468,7 @@ fun AdvancedSettingsScreen(
                                     valueRange = min.toFloat()..max.toFloat(),
                                     title = key + if (itemValue == def) "" else " *",
                                     steps = ceil(max - min).toInt() - 1,
-                                    onValueChange = { value ->
+                                    onValueChange = { value: Float ->
                                         if (!RPCSX.instance.settingsSet(
                                                 itemPath, value.toString()
                                             )
@@ -742,7 +742,7 @@ fun SettingsScreen(
                     description = stringResource(R.string.vdec_trace_log_summary),
                     checked = itemValue,
                     icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_description)) },
-                    onCheckedChange = { value ->
+                    onCheckedChange = { value: Boolean ->
                         val json = if (value) "{\"cellVdec\":\"Trace\"}" else "{\"cellVdec\":\"Notice\"}"
                         val ok = try {
                             RPCSX.instance.settingsSet("Log", json)
@@ -772,7 +772,7 @@ fun SettingsScreen(
                     description = stringResource(R.string.perf_overlay_summary),
                     checked = itemValue,
                     icon = { PreferenceIcon(icon = painterResource(R.drawable.ic_show_osc)) },
-                    onCheckedChange = { value ->
+                    onCheckedChange = { value: Boolean ->
                         val ok = try {
                             RPCSX.instance.settingsSet(
                                 "Video@@Performance Overlay@@Enabled",
@@ -859,14 +859,13 @@ fun ControllerSettings(
                     checked = itemValue,
                     title = stringResource(R.string.enable_haptic_feedback) + if (itemValue == def) "" else " *",
                     leadingIcon = null,
-                    onClick = { value ->
+                    onClick = { value: Boolean ->
                         GeneralSettings.setValue("haptic_feedback", value)
                         itemValue = value
                     }
                 )
             }
 
-            // --- НАСТРОЙКИ SHAKE (Тряска) ---
             item {
                 PreferenceHeader("Shake Motion Emulation")
             }
@@ -881,7 +880,7 @@ fun ControllerSettings(
                     checked = shakeEnabled,
                     title = "Enable Shake Detection",
                     leadingIcon = null,
-                    onClick = { value ->
+                    onClick = { value: Boolean ->
                         GeneralSettings.setValue("shake_enabled", value)
                         shakeEnabled = value
                     }
@@ -899,7 +898,7 @@ fun ControllerSettings(
                     valueRange = 5f..30f,
                     title = "Shake Sensitivity",
                     steps = 24,
-                    onValueChange = { value ->
+                    onValueChange = { value: Float ->
                         GeneralSettings.setValue("shake_sensitivity", value.toInt())
                         shakeSensitivity = value
                     },
@@ -918,7 +917,7 @@ fun ControllerSettings(
                     valueRange = 50f..500f,
                     title = "Shake Press Duration (ms)",
                     steps = 44,
-                    onValueChange = { value ->
+                    onValueChange = { value: Float ->
                         GeneralSettings.setValue("shake_press_duration", value.toInt())
                         shakeDuration = value
                     },
@@ -926,7 +925,6 @@ fun ControllerSettings(
                 )
             }
 
-            // --- НАСТРОЙКИ GYROSCOPE (Гироскоп) ---
             item {
                 PreferenceHeader("Full Gyroscope Support")
             }
@@ -942,7 +940,7 @@ fun ControllerSettings(
                     title = "Enable Gyroscope Motion",
                     description = "Maps tilt to Right Stick",
                     leadingIcon = null,
-                    onClick = { value ->
+                    onClick = { value: Boolean ->
                         GeneralSettings.setValue("motion_sensor_enabled", value)
                         motionEnabled = value
                     }
@@ -960,7 +958,7 @@ fun ControllerSettings(
                     valueRange = 10f..150f,
                     title = "Motion Sensitivity",
                     steps = 139,
-                    onValueChange = { value ->
+                    onValueChange = { value: Float ->
                         GeneralSettings.setValue("motion_sensitivity", value.toInt())
                         motionSensitivity = value
                     },
@@ -979,7 +977,7 @@ fun ControllerSettings(
                     valueRange = 0f..20f,
                     title = "Dead Zone",
                     steps = 19,
-                    onValueChange = { value ->
+                    onValueChange = { value: Float ->
                         GeneralSettings.setValue("motion_deadzone", value.toInt())
                         deadZone = value
                     },
@@ -987,7 +985,6 @@ fun ControllerSettings(
                 )
             }
 
-            // --- КАРТЫ КЛАВИШ ---
             item {
                 PreferenceHeader(stringResource(R.string.key_mappings))
             }
