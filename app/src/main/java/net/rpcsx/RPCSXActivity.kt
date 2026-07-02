@@ -37,10 +37,6 @@ class RPCSXActivity : ComponentActivity() {
     private var bootThread: Thread? = null
     private val inputBindings by lazy { InputBindingPrefs.loadBindings() }
     
-    // Флаги активности физического геймпада для каждого стика
-    private var isPhysicalLeftStickActive = false
-    private var isPhysicalRightStickActive = false
-    
     private lateinit var shakeDetector: ShakeMotionDetector
     private lateinit var motionSensorManager: MotionSensorManager
 
@@ -275,22 +271,10 @@ class RPCSXActivity : ComponentActivity() {
             }
         }
 
-        // Левый стик от физического геймпада
-        val physLeftX = (event.getAxisValue(MotionEvent.AXIS_X) * 127 + 128).toInt()
-        val physLeftY = (event.getAxisValue(MotionEvent.AXIS_Y) * 127 + 128).toInt()
-        
-        // Правый стик от физического геймпада
-        val physRightX = (event.getAxisValue(MotionEvent.AXIS_Z) * 127 + 128).toInt()
-        val physRightY = (event.getAxisValue(MotionEvent.AXIS_RZ) * 127 + 128).toInt()
-        
-        // Определяем активность физических стиков (с учетом мертвой зоны)
-        isPhysicalLeftStickActive = abs(physLeftX - 128) > 10 || abs(physLeftY - 128) > 10
-        isPhysicalRightStickActive = abs(physRightX - 128) > 10 || abs(physRightY - 128) > 10
-        
-        gamePadState.leftStickX = physLeftX
-        gamePadState.leftStickY = physLeftY
-        gamePadState.rightStickX = physRightX
-        gamePadState.rightStickY = physRightY
+        gamePadState.leftStickX = (event.getAxisValue(MotionEvent.AXIS_X) * 127 + 128).toInt()
+        gamePadState.leftStickY = (event.getAxisValue(MotionEvent.AXIS_Y) * 127 + 128).toInt()
+        gamePadState.rightStickX = (event.getAxisValue(MotionEvent.AXIS_Z) * 127 + 128).toInt()
+        gamePadState.rightStickY = (event.getAxisValue(MotionEvent.AXIS_RZ) * 127 + 128).toInt()
 
         sendGamepadData()
         return true
@@ -302,12 +286,8 @@ class RPCSXActivity : ComponentActivity() {
         
         val motionEnabled = GeneralSettings["motion_sensor_enabled"] as? Boolean ?: false
         val targetStick = GeneralSettings["motion_target_stick"] as? Int ?: 1
+        val motionMode = GeneralSettings["motion_mode"] as? String ?: "priority" // "priority" или "sum"
 
-        // Логика приоритета:
-        // - Если физический стик активен → используем его
-        // - Если гироскоп включен и физический стик неактивен → используем гироскоп
-        // - Иначе → используем физический стик (даже в центре)
-        
         val finalLeftX: Int
         val finalLeftY: Int
         val finalRightX: Int
@@ -315,9 +295,26 @@ class RPCSXActivity : ComponentActivity() {
         
         if (targetStick == 0) {
             // Гироскоп → левый стик
-            if (motionEnabled && !isPhysicalLeftStickActive) {
-                finalLeftX = RPCSX.motionLeftStickX
-                finalLeftY = RPCSX.motionLeftStickY
+            if (motionEnabled) {
+                if (motionMode == "priority") {
+                    // Priority mode: гироскоп только если виртуальный стик неактивен
+                    val virtualStickActive = binding.padOverlay.leftStickActive()
+                    if (!virtualStickActive) {
+                        finalLeftX = RPCSX.motionLeftStickX
+                        finalLeftY = RPCSX.motionLeftStickY
+                    } else {
+                        finalLeftX = gamePadState.leftStickX
+                        finalLeftY = gamePadState.leftStickY
+                    }
+                } else {
+                    // Sum mode: гироскоп добавляется к виртуальному стику
+                    val virtualX = gamePadState.leftStickX
+                    val virtualY = gamePadState.leftStickY
+                    val motionX = RPCSX.motionLeftStickX - 128
+                    val motionY = RPCSX.motionLeftStickY - 128
+                    finalLeftX = (virtualX + motionX).coerceIn(0, 255)
+                    finalLeftY = (virtualY + motionY).coerceIn(0, 255)
+                }
             } else {
                 finalLeftX = gamePadState.leftStickX
                 finalLeftY = gamePadState.leftStickY
@@ -328,9 +325,24 @@ class RPCSXActivity : ComponentActivity() {
             // Гироскоп → правый стик
             finalLeftX = gamePadState.leftStickX
             finalLeftY = gamePadState.leftStickY
-            if (motionEnabled && !isPhysicalRightStickActive) {
-                finalRightX = RPCSX.motionRightStickX
-                finalRightY = RPCSX.motionRightStickY
+            if (motionEnabled) {
+                if (motionMode == "priority") {
+                    val virtualStickActive = binding.padOverlay.rightStickActive()
+                    if (!virtualStickActive) {
+                        finalRightX = RPCSX.motionRightStickX
+                        finalRightY = RPCSX.motionRightStickY
+                    } else {
+                        finalRightX = gamePadState.rightStickX
+                        finalRightY = gamePadState.rightStickY
+                    }
+                } else {
+                    val virtualX = gamePadState.rightStickX
+                    val virtualY = gamePadState.rightStickY
+                    val motionX = RPCSX.motionRightStickX - 128
+                    val motionY = RPCSX.motionRightStickY - 128
+                    finalRightX = (virtualX + motionX).coerceIn(0, 255)
+                    finalRightY = (virtualY + motionY).coerceIn(0, 255)
+                }
             } else {
                 finalRightX = gamePadState.rightStickX
                 finalRightY = gamePadState.rightStickY
