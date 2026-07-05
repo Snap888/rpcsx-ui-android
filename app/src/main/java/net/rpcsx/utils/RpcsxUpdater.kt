@@ -15,6 +15,9 @@ import kotlin.system.exitProcess
 
 
 object RpcsxUpdater {
+    // === ИЗМЕНЕНИЕ: URL репозитория для релизов ===
+    private const val RELEASE_REPO = "Snap888/rpcsx-build"
+
     // The core embeds build decorations after the CalVer date-time: " Draft"/" RC"
     // for untagged/pre-release builds (with an optional tag number) and a trailing
     // "+" when built from a dirty tree, e.g. "2026.06.06-1436 Draft+". Strip them so
@@ -137,8 +140,11 @@ object RpcsxUpdater {
         return null
     }
 
+    // === ИЗМЕНЕНИЕ: URL для запроса релизов ===
+    private fun getReleaseUrl(): String = "https://github.com/$RELEASE_REPO"
+
     suspend fun checkForUpdate(): String? {
-        val url = DevRpcsxChannel // TODO: update once RPCSX has release with android support
+        val url = getReleaseUrl() // TODO: update once RPCSX has release with android support
 
         when (val fetchResult = GitHub.fetchLatestRelease(url)) {
             is GitHub.FetchResult.Success<*> -> {
@@ -179,7 +185,7 @@ object RpcsxUpdater {
     }
 
     suspend fun downloadUpdate(destinationDir: File, progressCallback: (Long, Long) -> Unit): File? {
-        val url = DevRpcsxChannel // TODO: GeneralSettings["rpcsx_channel"] as String
+        val url = getReleaseUrl() // TODO: GeneralSettings["rpcsx_channel"] as String
 
         when (val fetchResult = GitHub.fetchLatestRelease(url)) {
             is GitHub.FetchResult.Success<*> -> {
